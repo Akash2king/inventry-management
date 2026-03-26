@@ -1,0 +1,58 @@
+# ======================
+# Cargo & Rust Build
+# ======================
+/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+*.idb
+
+# ======================
+# IDE and Editor
+# ======================
+.vscode/
+.vscode-settings/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.iml
+.eclipse
+.project
+.pydevproject
+
+# ======================
+# Operating System
+# ======================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+eThumbs.db
+Thumbs.db
+desktop.ini
+
+# ======================
+# Environment Variables
+# ======================
+.env
+.env.local
+.env.*.local
+
+# ======================
+# Logs
+# ======================
+*.log
+logs/
+.log
+
+# ======================
+# Temporary Files
+# ======================
+*.bak
+*.tmp
+tmp/
+temp/
+.cache/

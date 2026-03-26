@@ -1,0 +1,159 @@
+# ======================
+# IDE and Editor
+# ======================
+.vscode/
+.idea/
+.vim/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+*.iml
+.project
+.pydevproject
+.eclipse
+*.code-workspace
+
+# ======================
+# Operating System
+# ======================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ======================
+# Logs & Monitoring
+# ======================
+*.log
+logs/
+.log
+npm-debug.log*
+npm-error.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pnpm-error.log*
+
+# ======================
+# Python (Backend)
+# ======================
+.venv/
+.env/
+venv/
+env/
+ENV/
+.Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.pytype/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.hypothesis/
+*.cover
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.env.local
+.env.prod.local
+
+# ======================
+# Node.js & JavaScript
+# ======================
+node_modules/
+.npm
+.eslintcache
+*.tsbuildinfo
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+npm-shrinkwrap.json
+
+# ======================
+# Build & Dist Output
+# ======================
+dist/
+build/
+release/
+out/
+.next/
+.nuxt/
+coverage/
+.cache/
+.intermediate/
+
+# ======================
+# Electron Specific
+# ======================
+waste_oil_desktop/dist/
+waste_oil_desktop/release/
+waste_oil_desktop/out/
+
+# ======================
+# Tauri Specific
+# ======================
+waste_oil_desktop-TAURI/src-tauri/target/
+waste_oil_desktop-TAURI/dist/
+waste_oil_desktop-TAURI/release/
+
+# ======================
+# Environment Variables
+# ======================
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ======================
+# Database & Cache
+# ======================
+*.sqlite3
+*.db
+db.sqlite3
+.sqlite3
+celerybeat-schedule
+
+# ======================
+# OS Temporary Files
+# ======================
+*.bak
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+tmp/
+temp/
+*.tmp
+
+# ======================
+# Workspace Files (Machine-Specific)
+# ======================
+.env
+.editorconfig.local
+.prettierrc.local
+*.local
+
+# ======================
+# IDE-Specific Directories
+# ======================
+.vscode/settings.json
+.idea/
+.DS_Store/

@@ -1,0 +1,29 @@
+{
+  "name": "waste-oil-desktop-tauri",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Waste Oil Management desktop client powered by React, Vite, and Tauri",
+  "type": "commonjs",
+  "scripts": {
+    "frontend:dev": "vite",
+    "frontend:build": "vite build",
+    "dev": "env -u SNAP -u SNAP_ARCH -u SNAP_COMMON -u SNAP_CONTEXT -u SNAP_COOKIE -u SNAP_DATA -u SNAP_EUID -u SNAP_INSTANCE_NAME -u SNAP_LAUNCHER_ARCH_TRIPLET -u SNAP_LIBRARY_PATH -u SNAP_NAME -u SNAP_REAL_HOME -u SNAP_REVISION -u SNAP_UID -u SNAP_USER_COMMON -u SNAP_USER_DATA -u SNAP_VERSION -u GTK_PATH -u GTK_EXE_PREFIX -u GTK_IM_MODULE_FILE -u GTK_MODULES -u GIO_MODULE_DIR tauri dev",
+    "build": "env -u SNAP -u SNAP_ARCH -u SNAP_COMMON -u SNAP_CONTEXT -u SNAP_COOKIE -u SNAP_DATA -u SNAP_EUID -u SNAP_INSTANCE_NAME -u SNAP_LAUNCHER_ARCH_TRIPLET -u SNAP_LIBRARY_PATH -u SNAP_NAME -u SNAP_REAL_HOME -u SNAP_REVISION -u SNAP_UID -u SNAP_USER_COMMON -u SNAP_USER_DATA -u SNAP_VERSION -u GTK_PATH -u GTK_EXE_PREFIX -u GTK_IM_MODULE_FILE -u GTK_MODULES -u GIO_MODULE_DIR tauri build",
+    "preview": "vite preview --host 127.0.0.1",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.54.2",
+    "react-router-dom": "^7.1.1",
+    "zod": "^3.24.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}
