@@ -10,13 +10,7 @@ import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-
-
-def loadenv():
-    load_dotenv()
-
-
-loadenv()
+load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "unsafe-dev-only-change-me")
 
@@ -136,7 +130,10 @@ _cors_from_env = [
     for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
     if o.strip()
 ]
-CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_from_env))
+# Always allow Vite dev; merge with env (e.g. LAN Vite http://192.168.1.100:5173 or custom file origin).
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(_cors_from_env + ["http://localhost:5173"])
+)
 
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
