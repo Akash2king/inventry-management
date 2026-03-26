@@ -105,6 +105,39 @@ waste_oil_desktop-TAURI/
    └── src/main.rs
 ```
 
+## Dashboard analytics (Electron + Tauri)
+
+Both desktop apps include the same analytics dashboard view with interactive insights.
+
+### Dashboard features
+
+- KPI cards: total records, queue, active, overdue, completion rate, average quantity
+- Alert mix panel with clickable filters
+- Records by role chart (Storeman, Treatment, Manager, Admin, GM)
+- Top vendors by volume with unit selector (`All Units`, `Kgs`, and detected units)
+- Department-wise workload panel
+- Record aging buckets (`0-7`, `8-15`, `16-30`, `30+`)
+- Due-soon panel with quick navigation to record details
+
+### Date filtering behavior
+
+- `Window` and `Range` are mutually exclusive
+- Selecting `Window` clears `Range`
+- Setting `Range` (`From` / `To`) disables `Window` logic
+
+### Export
+
+- Top Vendors export: `dashboard_top_vendors_snapshot.xlsx`
+- Due Soon export: `dashboard_due_soon_snapshot.xlsx`
+
+Exports are generated from the currently filtered scope.
+
+### Analytics endpoints used
+
+- `GET /api/v1/admin-console/analytics/summary/`
+- `GET /api/v1/admin-console/analytics/records/by-stage/`
+- `GET /api/v1/admin-console/analytics/records/by-alert/`
+
 ## Internal network setup
 
 1. **Run the Django API on a machine that other PCs can reach** (e.g. a small server or an office PC with a static LAN IP). Bind to all interfaces in development if needed, for example:

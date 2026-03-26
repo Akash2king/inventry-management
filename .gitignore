@@ -152,6 +152,13 @@ temp/
 *.local
 
 # ======================
+# Dashboard Export Artifacts
+# ======================
+dashboard_*_snapshot.xlsx
+dashboard_*_snapshot.csv
+~$*.xlsx
+
+# ======================
 # IDE-Specific Directories
 # ======================
 .vscode/settings.json
