@@ -1,15 +1,34 @@
 # Waste Oil Management System
 
-Monorepo-style layout for the **Waste Oil Management System**: a Django API (`waste_oil_backend`) and an Electron + React desktop client (`waste_oil_desktop`).
+Monorepo-style layout for the **Waste Oil Management System**:
+
+- Django REST API backend (`waste_oil_backend`)
+- Electron + React desktop client (`waste_oil_desktop`)
+- Tauri + React desktop client (`waste_oil_desktop-TAURI`)
 
 ## Directory overview
 
 ```
 inventry-management/
-├── README.md                 # This file
-├── waste_oil_backend/        # Django REST API
-└── waste_oil_desktop/        # Electron + React (Vite) desktop app
+├── README.md                      # Project overview
+├── .env.example                   # Root environment template
+├── LICENSE
+├── Docs/
+│   ├── QUICKSTART.md
+│   ├── DEVELOPMENT.md
+│   ├── ARCHITECTURE.md
+│   └── CONTRIBUTING.md
+├── waste_oil_backend/             # Django REST API
+├── waste_oil_desktop/             # Electron + React (Vite)
+└── waste_oil_desktop-TAURI/       # Tauri + React (Vite)
 ```
+
+## Documentation map
+
+- [Quick start](Docs/QUICKSTART.md)
+- [Development guide](Docs/DEVELOPMENT.md)
+- [Architecture](Docs/ARCHITECTURE.md)
+- [Contributing](Docs/CONTRIBUTING.md)
 
 ### Backend (`waste_oil_backend/`)
 
@@ -62,8 +81,28 @@ waste_oil_desktop/
     ├── components/
     ├── store/
     ├── api/
-    ├── hooks/
+   ├── platform/
     └── utils/
+```
+
+### Tauri frontend (`waste_oil_desktop-TAURI/`)
+
+```
+waste_oil_desktop-TAURI/
+├── package.json
+├── vite.config.js
+├── .env.example
+├── src/
+│   ├── pages/
+│   ├── components/
+│   ├── store/
+│   ├── api/
+│   ├── platform/
+│   └── utils/
+└── src-tauri/
+   ├── Cargo.toml
+   ├── tauri.conf.json
+   └── src/main.rs
 ```
 
 ## Internal network setup
@@ -78,17 +117,23 @@ waste_oil_desktop/
 
 4. **Database & Redis**: Keep Postgres and Redis on the same trusted network segment as the API server. Point `DATABASE_URL` and `REDIS_URL` at those hosts using LAN hostnames or IPs.
 
-## Pointing Electron (Vite) at the correct LAN server IP
+## Pointing desktop clients to LAN API server
 
-The desktop app reads the API base URL from **`VITE_API_BASE_URL`** (see `waste_oil_desktop/.env.example`).
+Both desktop apps read the API base URL from **`VITE_API_BASE_URL`**:
+
+- `waste_oil_desktop/.env`
+- `waste_oil_desktop-TAURI/.env`
 
 1. On the machine where the API runs, note its IPv4 address (e.g. **192.168.1.100**):
    - Windows: `ipconfig` → IPv4 Address under your active adapter.
    - Linux/macOS: `ip a` or System Settings → Network.
 
-2. Copy `.env.example` to `.env` in `waste_oil_desktop/`:
+2. Copy `.env.example` to `.env` in each frontend:
    ```bash
    cd waste_oil_desktop
+   cp .env.example .env
+
+   cd ../waste_oil_desktop-TAURI
    cp .env.example .env
    ```
 
@@ -105,27 +150,65 @@ The desktop app reads the API base URL from **`VITE_API_BASE_URL`** (see `waste_
 
 5. If the API moves to another PC or IP, update `.env` and rebuild (`npm run build`) for production installers.
 
-## Quick start (after dependencies are installed)
+## Setup and run
 
-**Backend**
+### 1. Backend setup
+
+Linux/macOS:
 
 ```bash
 cd waste_oil_backend
-python -m venv .venv
-.venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements/dev.txt
-copy .env.example .env
+cp .env.example .env
 python manage.py migrate
+python manage.py seed_workflow_demo
 python manage.py runserver 0.0.0.0:8000
 ```
 
-**Frontend**
+Windows PowerShell:
+
+```powershell
+cd waste_oil_backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements\dev.txt
+Copy-Item .env.example .env
+python manage.py migrate
+python manage.py seed_workflow_demo
+python manage.py runserver 0.0.0.0:8000
+```
+
+### 2. Run Electron client
 
 ```bash
 cd waste_oil_desktop
 npm install
-copy .env.example .env
+cp .env.example .env  # Windows: Copy-Item .env.example .env
 npm run dev
 ```
 
-Use `npm run build` to produce a production renderer bundle and packaged app per `electron-builder.config.js`, and `npm run preview` to preview the Vite build locally.
+### 3. Run Tauri client
+
+```bash
+cd waste_oil_desktop-TAURI
+npm install
+cp .env.example .env  # Windows: Copy-Item .env.example .env
+npm run dev
+```
+
+## Build commands
+
+- Electron production build:
+   - `cd waste_oil_desktop && npm run build`
+- Tauri production build:
+   - `cd waste_oil_desktop-TAURI && npm run build`
+- Frontend preview:
+   - `npm run preview`
+
+## Default local URLs
+
+- Backend API: `http://127.0.0.1:8000`
+- Electron Vite dev server: `http://127.0.0.1:5173`
+- Tauri Vite dev server: `http://127.0.0.1:1420`

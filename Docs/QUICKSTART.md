@@ -2,6 +2,16 @@
 
 Get the Waste Oil Management System running locally in 10 minutes.
 
+Repository layout used in this guide:
+
+```
+inventry-management/
+├── Docs/
+├── waste_oil_backend/
+├── waste_oil_desktop/
+└── waste_oil_desktop-TAURI/
+```
+
 ## Prerequisites Checklist
 
 - [ ] Python 3.9 or higher (`python --version`)
@@ -15,6 +25,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 ## 5-Minute Backend Setup
+
+Linux/macOS:
 
 ```bash
 # 1. Clone repo and navigate
@@ -41,6 +53,19 @@ python manage.py seed_workflow_demo
 python manage.py runserver 0.0.0.0:8000
 ```
 
+Windows PowerShell:
+
+```powershell
+cd waste_oil_backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements\dev.txt
+Copy-Item .env.example .env
+python manage.py migrate
+python manage.py seed_workflow_demo
+python manage.py runserver 0.0.0.0:8000
+```
+
 ✅ Backend running at `http://localhost:8000`
 
 ## 3-Minute Frontend Setup (Choose One)
@@ -50,7 +75,7 @@ python manage.py runserver 0.0.0.0:8000
 ```bash
 cd waste_oil_desktop
 npm install
-cp .env.example .env
+cp .env.example .env  # Windows: Copy-Item .env.example .env
 npm run dev
 ```
 
@@ -61,7 +86,7 @@ npm run dev
 ```bash
 cd waste_oil_desktop-TAURI
 npm install
-cp .env.example .env
+cp .env.example .env  # Windows: Copy-Item .env.example .env
 npm run dev
 ```
 
@@ -100,9 +125,10 @@ Choose any one:
 6. Continue through all stages to **gm**
 
 ### Read Documentation
-- [DEVELOPMENT.md](DEVELOPMENT.md) - Architecture & API details
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System design & workflows  
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Code style & contribution guidelines
+- [Development guide](DEVELOPMENT.md) - Architecture & API details
+- [Architecture](ARCHITECTURE.md) - System design & workflows
+- [Contributing](CONTRIBUTING.md) - Code style & contribution guidelines
+- [Project README](../README.md) - Directory overview and setup map
 
 ### Stop Services
 
@@ -189,6 +215,12 @@ python manage.py runserver 0.0.0.0:8000
 **Terminal 2** (Frontend):
 ```bash
 cd waste_oil_desktop
+npm run dev
+```
+
+Alternative Terminal 2 (Tauri):
+```bash
+cd waste_oil_desktop-TAURI
 npm run dev
 ```
 
