@@ -24,6 +24,73 @@ inventry-management/
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+### Tauri system dependencies (Linux, Windows, macOS)
+
+Install these only if you will run `waste_oil_desktop-TAURI`.
+
+Linux (Ubuntu/Debian):
+
+```bash
+sudo apt update
+sudo apt install -y \
+	libwebkit2gtk-4.1-dev \
+	build-essential \
+	curl \
+	wget \
+	file \
+	libxdo-dev \
+	libssl-dev \
+	libayatana-appindicator3-dev \
+	librsvg2-dev
+```
+
+Linux (Fedora):
+
+```bash
+sudo dnf install -y \
+	webkit2gtk4.1-devel \
+	openssl-devel \
+	curl \
+	wget \
+	file \
+	libappindicator-gtk3-devel \
+	librsvg2-devel
+```
+
+Windows (PowerShell):
+
+```powershell
+# Rust toolchain
+winget install --id Rustlang.Rustup -e
+
+# Microsoft C++ Build Tools (Visual Studio Build Tools)
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e
+
+# WebView2 runtime (usually preinstalled on Windows 11)
+winget install --id Microsoft.EdgeWebView2Runtime -e
+```
+
+macOS:
+
+```bash
+# Xcode command line tools
+xcode-select --install
+
+# Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Verify
+rustc --version
+cargo --version
+```
+
+Verify Rust on any OS:
+
+```bash
+rustc --version
+cargo --version
+```
+
 ## 5-Minute Backend Setup
 
 Linux/macOS:

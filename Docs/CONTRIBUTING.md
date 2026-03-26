@@ -11,7 +11,29 @@ Thank you for your interest in contributing! This document provides guidelines a
 - **Rust** (only for Tauri development)
 - **Git**
 
-### Setup Development Environment
+### Install Rust (required for Tauri)
+
+Linux/macOS:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustc --version
+cargo --version
+```
+
+Windows (PowerShell):
+
+```powershell
+winget install --id Rustlang.Rustup -e
+rustc --version
+cargo --version
+```
+
+If `winget` is unavailable, install rustup from:
+- https://rustup.rs/
+
+### Installation and Setup
 
 1. **Clone the repository**:
    ```bash
@@ -19,19 +41,40 @@ Thank you for your interest in contributing! This document provides guidelines a
    cd inventry-management
    ```
 
-2. **Backend setup**:
+2. **Backend installation and setup**:
+
+   Linux/macOS:
    ```bash
    cd waste_oil_backend
    python3 -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   source .venv/bin/activate
    pip install -r requirements/dev.txt
    cp .env.example .env
    python manage.py migrate
    python manage.py seed_workflow_demo
+   ```
+
+   Windows PowerShell:
+   ```powershell
+   cd waste_oil_backend
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements\dev.txt
+   Copy-Item .env.example .env
+   python manage.py migrate
+   python manage.py seed_workflow_demo
+   ```
+
+3. **Run services**:
+
+   Start backend:
+   ```bash
+   cd waste_oil_backend
+   source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate.ps1
    python manage.py runserver 0.0.0.0:8000
    ```
 
-3. **Frontend setup** (choose one):
+   Start frontend (choose one):
 
    **Electron**:
    ```bash
@@ -48,6 +91,11 @@ Thank you for your interest in contributing! This document provides guidelines a
    cp .env.example .env
    npm run dev
    ```
+
+4. **Default local URLs**:
+   - Backend API: `http://127.0.0.1:8000`
+   - Electron Vite dev server: `http://127.0.0.1:5173`
+   - Tauri Vite dev server: `http://127.0.0.1:1420`
 
 ## Code Style & Standards
 

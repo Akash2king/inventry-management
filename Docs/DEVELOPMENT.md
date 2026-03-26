@@ -2,6 +2,94 @@
 
 Detailed developer documentation for the Waste Oil Management System.
 
+## Installation, Setup, and Running
+
+Use this section for a clean first-time local setup.
+
+### Prerequisites
+
+- Python 3.9+
+- Node.js 18+ and npm 9+
+- Git
+- Rust toolchain (only required for Tauri)
+
+Install Rust (if using Tauri):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### Step 1: Clone repository
+
+```bash
+git clone https://github.com/your-org/waste-oil-management.git
+cd inventry-management
+```
+
+### Step 2: Install and run backend
+
+Linux/macOS:
+
+```bash
+cd waste_oil_backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements/dev.txt
+cp .env.example .env
+python manage.py migrate
+python manage.py seed_workflow_demo
+python manage.py runserver 0.0.0.0:8000
+```
+
+Windows PowerShell:
+
+```powershell
+cd waste_oil_backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements\dev.txt
+Copy-Item .env.example .env
+python manage.py migrate
+python manage.py seed_workflow_demo
+python manage.py runserver 0.0.0.0:8000
+```
+
+### Step 3: Install and run Electron desktop app
+
+```bash
+cd waste_oil_desktop
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Windows PowerShell copy command:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### Step 4: Install and run Tauri desktop app (optional)
+
+```bash
+cd waste_oil_desktop-TAURI
+npm install
+cp .env.example .env
+npm run dev
+```
+
+### Local endpoints
+
+- Backend API: `http://127.0.0.1:8000`
+- Electron Vite: `http://127.0.0.1:5173`
+- Tauri Vite: `http://127.0.0.1:1420`
+
+### Build commands
+
+- Electron build: `cd waste_oil_desktop && npm run build`
+- Tauri build: `cd waste_oil_desktop-TAURI && npm run build`
+- Preview frontend build: `npm run preview`
+
 ## Architecture Overview
 
 ```
@@ -447,4 +535,4 @@ python manage.py squashmigrations apps.records 0001 0010
 
 ---
 
-For more information, see [README.md](README.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+For more information, see [README](../README.md) and [Contributing](CONTRIBUTING.md).

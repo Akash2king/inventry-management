@@ -152,6 +152,79 @@ Both desktop apps read the API base URL from **`VITE_API_BASE_URL`**:
 
 ## Setup and run
 
+### 0. Tauri prerequisites (Rust + system dependencies)
+
+Install these only if you plan to run `waste_oil_desktop-TAURI`.
+
+Linux (Ubuntu/Debian):
+
+```bash
+sudo apt update
+sudo apt install -y \
+   libwebkit2gtk-4.1-dev \
+   build-essential \
+   curl \
+   wget \
+   file \
+   libxdo-dev \
+   libssl-dev \
+   libayatana-appindicator3-dev \
+   librsvg2-dev
+
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustc --version
+cargo --version
+```
+
+Linux (Fedora):
+
+```bash
+sudo dnf install -y \
+   webkit2gtk4.1-devel \
+   openssl-devel \
+   curl \
+   wget \
+   file \
+   libappindicator-gtk3-devel \
+   librsvg2-devel
+
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustc --version
+cargo --version
+```
+
+Windows PowerShell:
+
+```powershell
+# Rust toolchain
+winget install --id Rustlang.Rustup -e
+
+# Microsoft C++ Build Tools
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e
+
+# WebView2 runtime (often preinstalled)
+winget install --id Microsoft.EdgeWebView2Runtime -e
+
+rustc --version
+cargo --version
+```
+
+macOS:
+
+```bash
+# Xcode command line tools
+xcode-select --install
+
+# Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
+rustc --version
+cargo --version
+```
+
 ### 1. Backend setup
 
 Linux/macOS:
