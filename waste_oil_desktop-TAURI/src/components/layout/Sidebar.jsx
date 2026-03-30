@@ -7,6 +7,15 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="sidebar-brand__mark" aria-hidden>
+          WM
+        </div>
+        <div>
+          <div className="sidebar-brand__text">Waste</div>
+          <div className="sidebar-brand__sub">Management</div>
+        </div>
+      </div>
       <nav className="sidebar-nav">
         <NavLink to="/" end className={navClass}>
           Dashboard
@@ -41,12 +50,12 @@ export function Sidebar() {
         >
           {user?.role || "—"}
         </span>
-        <div style={{ marginTop: 6, opacity: 0.85 }}>
+        <div style={{ marginTop: 6, opacity: 0.85, fontSize: "0.82rem" }}>
           {user?.department_name || "No department"}
         </div>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="btn btn-ghost btn-sm"
           style={{ marginTop: "0.75rem", width: "100%" }}
           onClick={() => logout()}
         >

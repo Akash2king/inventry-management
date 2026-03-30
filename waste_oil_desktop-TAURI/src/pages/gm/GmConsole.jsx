@@ -39,6 +39,7 @@ export function GmConsole() {
   const [search, setSearch] = useState("");
 
   const [modal, setModal] = useState(null);
+  const [userPreview, setUserPreview] = useState(null);
 
   const loadDeps = useCallback(async () => {
     const data = await gmApi.getDepartments(getToken());
@@ -244,7 +245,12 @@ export function GmConsole() {
               </tr>
             ) : null}
             {employees.map((row) => (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                onClick={() => setUserPreview(row)}
+                style={{ cursor: "pointer" }}
+                title="User details"
+              >
                 <td>{row.username}</td>
                 <td>{row.email}</td>
                 <td>{row.full_name || "—"}</td>
@@ -252,7 +258,7 @@ export function GmConsole() {
                 <td>{row.department_name || "—"}</td>
                 <td>{row.department_stage_order ?? "—"}</td>
                 <td>{row.is_active ? "Yes" : "No"}</td>
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     className="btn btn-ghost"
@@ -267,6 +273,18 @@ export function GmConsole() {
           </tbody>
         </table>
       </div>
+
+      {userPreview ? (
+        <UserCardModal
+          row={userPreview}
+          onClose={() => setUserPreview(null)}
+          onEdit={() => {
+            const row = userPreview;
+            setUserPreview(null);
+            setModal({ mode: "edit", row, deptByStage });
+          }}
+        />
+      ) : null}
 
       {modal ? (
         <EmployeeModal
@@ -283,6 +301,58 @@ export function GmConsole() {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function UserCardModal({ row, onClose, onEdit }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ marginTop: 0 }}>{row.full_name || row.username}</h3>
+        <p style={{ margin: "0 0 1rem", fontSize: "0.85rem", opacity: 0.8 }}>User</p>
+        <dl
+          style={{
+            margin: 0,
+            display: "grid",
+            gap: "0.65rem",
+            fontSize: "0.92rem",
+          }}
+        >
+          <div>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Username</dt>
+            <dd style={{ margin: 0 }}>{row.username}</dd>
+          </div>
+          <div>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Email</dt>
+            <dd style={{ margin: 0 }}>{row.email || "—"}</dd>
+          </div>
+          <div>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Role</dt>
+            <dd style={{ margin: 0, textTransform: "capitalize" }}>{row.role || "—"}</dd>
+          </div>
+          <div>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Department</dt>
+            <dd style={{ margin: 0 }}>{row.department_name || "—"}</dd>
+          </div>
+          <div>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Stage</dt>
+            <dd style={{ margin: 0 }}>{row.department_stage_order ?? "—"}</dd>
+          </div>
+          <div>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Active</dt>
+            <dd style={{ margin: 0 }}>{row.is_active ? "Yes" : "No"}</dd>
+          </div>
+        </dl>
+        <div style={{ marginTop: "1.25rem", display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Close
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onEdit}>
+            Edit
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

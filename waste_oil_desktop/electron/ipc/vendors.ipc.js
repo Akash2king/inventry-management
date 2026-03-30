@@ -9,6 +9,14 @@ function registerVendorsIpc(executeHttpRequest) {
     });
   });
 
+  ipcMain.handle("vendors:get", async (event, { id, token }) => {
+    return executeHttpRequest(event, {
+      method: "GET",
+      url: `records/vendors/${id}/`,
+      token,
+    });
+  });
+
   ipcMain.handle("vendors:create", async (event, { data, token }) => {
     return executeHttpRequest(event, {
       method: "POST",
@@ -23,6 +31,14 @@ function registerVendorsIpc(executeHttpRequest) {
       method: "PATCH",
       url: `records/vendors/${id}/`,
       data,
+      token,
+    });
+  });
+
+  ipcMain.handle("vendors:remove", async (event, { id, token }) => {
+    return executeHttpRequest(event, {
+      method: "DELETE",
+      url: `records/vendors/${id}/`,
       token,
     });
   });

@@ -1,6 +1,7 @@
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { SearchableVendorSelect } from "@/components/records/SearchableVendorSelect.jsx";
 
 const schema = z.object({
   vendor_id: z.string().uuid("Select a vendor"),
@@ -23,6 +24,7 @@ export function RecordForm({
 }) {
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm({
@@ -43,15 +45,20 @@ export function RecordForm({
     <form onSubmit={handleSubmit(onSubmit)} className="grid-form">
       <div className="field" style={{ gridColumn: "1 / -1" }}>
         <label htmlFor="vendor_id">Vendor</label>
-        <select id="vendor_id" {...register("vendor_id")} disabled={vendors.length === 0}>
-          <option value="">— Select vendor —</option>
-          {vendors.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-              {v.contact ? ` (${v.contact})` : ""}
-            </option>
-          ))}
-        </select>
+        <Controller
+          name="vendor_id"
+          control={control}
+          render={({ field }) => (
+            <SearchableVendorSelect
+              id="vendor_id"
+              vendors={vendors}
+              value={field.value}
+              onChange={field.onChange}
+              disabled={vendors.length === 0}
+              error={Boolean(errors.vendor_id)}
+            />
+          )}
+        />
         {errors.vendor_id ? (
           <div className="field-error">{errors.vendor_id.message}</div>
         ) : null}

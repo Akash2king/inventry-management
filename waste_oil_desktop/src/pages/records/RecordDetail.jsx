@@ -11,6 +11,7 @@ import { ReturnModal } from "@/components/workflow/ReturnModal.jsx";
 import { canActForward, canActReturn, canActEdit, isCurrentHolder } from "@/utils/permissions.js";
 import { nextStageName, prevStageName } from "@/utils/stageLabels.js";
 import { formatHolderLine } from "@/utils/holderDisplay.js";
+import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
 
 export function RecordDetail() {
   const { id } = useParams();
@@ -22,6 +23,7 @@ export function RecordDetail() {
   const transitions = useWorkflowStore((s) => s.transitions);
   const [fwdOpen, setFwdOpen] = useState(false);
   const [retOpen, setRetOpen] = useState(false);
+  const [vendorModal, setVendorModal] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -121,7 +123,30 @@ export function RecordDetail() {
 
       <div className="card" style={{ marginTop: "1rem" }}>
         <div className="grid-form">
-          <Field label="Vendor" value={r.vendor?.name ?? r.vendor_name ?? "—"} />
+          <div className="field">
+            <label>Vendor</label>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+              <span>{r.vendor?.name ?? r.vendor_name ?? "—"}</span>
+              {r.vendor || r.vendor_id ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: "0.82rem", padding: "0.2rem 0.5rem" }}
+                  onClick={() => {
+                    if (r.vendor) setVendorModal({ detail: r.vendor });
+                    else if (r.vendor_id) {
+                      setVendorModal({
+                        vendorId: String(r.vendor_id),
+                        fallbackName: r.vendor_name || "Vendor",
+                      });
+                    }
+                  }}
+                >
+                  Contact card
+                </button>
+              ) : null}
+            </div>
+          </div>
           <Field label="Vendor contact" value={r.vendor?.contact || "—"} />
           <Field label="Vendor address" value={r.vendor?.address || "—"} />
           <Field label="Product description" value={r.product_description || "—"} />
@@ -212,6 +237,14 @@ export function RecordDetail() {
           recordId={id}
           prevStageName={prevStageName(r.current_stage)}
           onClose={() => setRetOpen(false)}
+        />
+      ) : null}
+      {vendorModal ? (
+        <VendorContactModal
+          onClose={() => setVendorModal(null)}
+          detail={vendorModal.detail}
+          vendorId={vendorModal.vendorId}
+          fallbackName={vendorModal.fallbackName}
         />
       ) : null}
     </div>

@@ -1,9 +1,14 @@
 from django.db.models import Exists, OuterRef, Q
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -102,6 +107,12 @@ def records_visible_to_user(user):
     return qs.none()
 
 
+def _query_truthy(value) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def apply_list_filters(qs, request):
     p = request.query_params
     if stage := p.get("stage"):
@@ -121,6 +132,12 @@ def apply_list_filters(qs, request):
             | Q(record_number__icontains=search)
             | Q(product_description__icontains=search)
             | Q(product_type__icontains=search)
+        )
+    if _query_truthy(p.get("exclude_completed")):
+        qs = qs.exclude(alert_level=WasteOilRecord.AlertLevel.COMPLETED)
+    if _query_truthy(p.get("overdue")):
+        qs = qs.filter(due_date__lt=timezone.localdate()).exclude(
+            alert_level=WasteOilRecord.AlertLevel.COMPLETED
         )
     return qs
 
@@ -202,17 +219,30 @@ class VendorListCreateView(ListCreateAPIView):
         return Vendor.objects.all().order_by("name", "id")
 
 
-class VendorDetailView(RetrieveUpdateAPIView):
+class VendorDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = VendorSerializer
     lookup_field = "pk"
 
     def get_permissions(self):
-        if self.request.method in ("PATCH", "PUT"):
+        if self.request.method in ("PATCH", "PUT", "DELETE"):
             return [IsAuthenticated(), IsStoremanGmOrSuperadmin()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
         return Vendor.objects.all()
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {
+                    "detail": "Cannot delete this vendor because waste oil records still reference it.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class WasteOilRecordAttachmentView(APIView):

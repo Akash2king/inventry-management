@@ -3,7 +3,7 @@
  */
 module.exports = {
   appId: "com.wasteoil.desktop",
-  productName: "Waste Oil Desktop",
+  productName: "Waste Management",
   directories: {
     output: "release",
     buildResources: "build",

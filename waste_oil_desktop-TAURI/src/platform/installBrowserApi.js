@@ -15,6 +15,12 @@ function buildRecordsQuery(filters = {}) {
   if (filters.date_from) p.set("date_from", filters.date_from);
   if (filters.date_to) p.set("date_to", filters.date_to);
   if (filters.search) p.set("search", filters.search);
+  if (filters.alert_level) p.set("alert_level", String(filters.alert_level));
+  if (filters.department_id != null && filters.department_id !== "") {
+    p.set("department_id", String(filters.department_id));
+  }
+  if (filters.exclude_completed) p.set("exclude_completed", "1");
+  if (filters.overdue) p.set("overdue", "1");
   const q = p.toString();
   return q ? `?${q}` : "";
 }
@@ -142,6 +148,8 @@ function createBrowserApi(baseUrl) {
     vendors: {
       list: async (tokenArg) =>
         request("GET", "records/vendors/", { token: tokenArg }),
+      get: async (id, tokenArg) =>
+        request("GET", `records/vendors/${id}/`, { token: tokenArg }),
       create: async (data, tokenArg) =>
         request("POST", "records/vendors/", { json: data, token: tokenArg }),
       update: async (id, data, tokenArg) =>
@@ -149,17 +157,20 @@ function createBrowserApi(baseUrl) {
           json: data,
           token: tokenArg,
         }),
+      remove: async (id, tokenArg) =>
+        request("DELETE", `records/vendors/${id}/`, { token: tokenArg }),
     },
     records: {
-      getAll: async (filters) => {
+      getAll: async (filters, tokenArg) => {
         const qs = buildRecordsQuery(filters || {});
-        return request("GET", `records/${qs}`);
+        return request("GET", `records/${qs}`, { token: tokenArg });
       },
-      getById: async (id) => request("GET", `records/${id}/`),
-      create: async (data) =>
-        request("POST", "records/", { json: data }),
-      update: async (id, data) =>
-        request("PATCH", `records/${id}/`, { json: data }),
+      getById: async (id, tokenArg) =>
+        request("GET", `records/${id}/`, { token: tokenArg }),
+      create: async (data, tokenArg) =>
+        request("POST", "records/", { json: data, token: tokenArg }),
+      update: async (id, data, tokenArg) =>
+        request("PATCH", `records/${id}/`, { json: data, token: tokenArg }),
       uploadAttachment: async (id, file) => {
         if (!file) {
           return { ok: false, status: 0, error: "No file" };
@@ -175,11 +186,11 @@ function createBrowserApi(baseUrl) {
           typeof payload === "string"
             ? { note: payload ?? "" }
             : {
-                note: payload?.note ?? "",
-                ...(payload?.next_holder_id
-                  ? { next_holder_id: payload.next_holder_id }
-                  : {}),
-              };
+              note: payload?.note ?? "",
+              ...(payload?.next_holder_id
+                ? { next_holder_id: payload.next_holder_id }
+                : {}),
+            };
         return request("POST", `records/${id}/forward/`, {
           json: body,
           token: tokenArg,

@@ -17,6 +17,7 @@ function getMainWindow() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: "Waste Management",
     width: 1280,
     height: 800,
     webPreferences: {

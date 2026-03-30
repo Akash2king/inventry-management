@@ -7,6 +7,15 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="sidebar-brand__mark" aria-hidden>
+          WM
+        </div>
+        <div>
+          <div className="sidebar-brand__text">Waste</div>
+          <div className="sidebar-brand__sub">Management</div>
+        </div>
+      </div>
       <nav className="sidebar-nav">
         <NavLink to="/" end className={navClass}>
           Dashboard

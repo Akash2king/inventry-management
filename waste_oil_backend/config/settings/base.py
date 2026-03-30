@@ -130,10 +130,14 @@ _cors_from_env = [
     for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
     if o.strip()
 ]
-# Always allow Vite dev; merge with env (e.g. LAN Vite http://192.168.1.100:5173 or custom file origin).
-CORS_ALLOWED_ORIGINS = list(
-    dict.fromkeys(_cors_from_env + ["http://localhost:5173"])
-)
+# Default dev frontends: Vite (5173) and Tauri+Vite (1420). Merge with env (e.g. LAN URLs).
+_DEFAULT_CORS_DEV_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+]
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_from_env + _DEFAULT_CORS_DEV_ORIGINS))
 
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))

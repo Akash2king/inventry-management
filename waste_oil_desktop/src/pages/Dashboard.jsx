@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import * as XLSX from "xlsx";
 import { useRecordStore } from "@/store/recordStore.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
+import { useAuthStore } from "@/store/authStore.js";
 import { useAnalytics, KPICard, StageDistributionCard } from "@/components/dashboard/index.js";
+import { buildRecordsSearch } from "@/components/dashboard/buildRecordsHref.js";
+import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
+import { showToast } from "@/components/ui/ToastContainer.jsx";
+import { downloadExcelFile } from "@/utils/excelExport.js";
+
 
 const LOOKBACK_OPTIONS = [
   { label: "7D", value: 7 },
@@ -38,13 +43,6 @@ function dayDiff(fromDate, toDateValue) {
   return Math.ceil((d.getTime() - fromDate.getTime()) / 86400000);
 }
 
-function downloadExcel(filename, sheetName, headers, rows) {
-  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  XLSX.writeFile(workbook, filename);
-}
-
 function ageDays(record, today) {
   if (typeof record.days_elapsed === "number") return record.days_elapsed;
   const entry = toDate(record.entry_date);
@@ -64,19 +62,20 @@ function normalizeUnit(unit) {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const fetchAll = useRecordStore((s) => s.fetchAll);
   const records = useRecordStore((s) => s.records);
-  const pagination = useRecordStore((s) => s.pagination);
   const fetchQueue = useWorkflowStore((s) => s.fetchQueue);
   const queue = useWorkflowStore((s) => s.queue);
 
   const { analytics, loading: analyticsLoading, error: analyticsError } = useAnalytics();
-  const [lookbackDays, setLookbackDays] = useState(30);
+  const [lookbackDays, setLookbackDays] = useState(0);
   const [stageFilter, setStageFilter] = useState(null);
   const [alertFilter, setAlertFilter] = useState(null);
   const [vendorUnitFilter, setVendorUnitFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [vendorModal, setVendorModal] = useState(null);
 
   useEffect(() => {
     fetchAll({ page_size: 250 }).catch(() => {});
@@ -125,7 +124,21 @@ export function Dashboard() {
     });
   }, [records, cutoff, startDate, endDate, stageFilter, alertFilter]);
 
-  const total = pagination.count || records.length || 0;
+  const scopeForLinks = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      lookbackDays,
+      todayStart: today,
+    }),
+    [dateFrom, dateTo, lookbackDays, today],
+  );
+
+  const goRecords = (extra) => {
+    navigate(`/records${buildRecordsSearch(scopeForLinks, extra)}`);
+  };
+
+  const total = filteredRecords.length;
   const queueCount = queue.length;
   const activeApprox = filteredRecords.filter((r) => r.alert_level !== "completed").length;
 
@@ -142,10 +155,6 @@ export function Dashboard() {
     .map((r) => ({ ...r, dueInDays: dayDiff(today, r.due_date) }))
     .filter((r) => r.dueInDays !== null && r.dueInDays >= 0 && r.dueInDays <= 7 && r.alert_level !== "completed")
     .sort((a, b) => a.dueInDays - b.dueInDays);
-
-  const avgQuantity = filteredRecords.length
-    ? (filteredRecords.reduce((sum, r) => sum + Number(r.quantity || 0), 0) / filteredRecords.length).toFixed(1)
-    : "0.0";
 
   const alertCounts = useMemo(() => {
     const counts = { green: 0, yellow: 0, red: 0, completed: 0 };
@@ -187,15 +196,18 @@ export function Dashboard() {
     filteredRecords
       .filter((r) => vendorUnitFilter === "all" || normalizeUnit(r.unit) === vendorUnitFilter)
       .forEach((r) => {
-      const name = r.vendor_name || "Unknown Vendor";
-      const qty = Number(r.quantity || 0);
-      const curr = map.get(name) || { count: 0, quantity: 0 };
-      curr.count += 1;
-      curr.quantity += qty;
-      map.set(name, curr);
+        const name = r.vendor_name || "Unknown Vendor";
+        const vid = r.vendor_id ? String(r.vendor_id) : null;
+        const key = vid || `name:${name}`;
+        const qty = Number(r.quantity || 0);
+        const curr = map.get(key) || { vendor_id: vid, name, count: 0, quantity: 0 };
+        curr.name = name;
+        if (vid) curr.vendor_id = vid;
+        curr.count += 1;
+        curr.quantity += qty;
+        map.set(key, curr);
       });
-    return Array.from(map.entries())
-      .map(([name, v]) => ({ name, ...v }))
+    return Array.from(map.values())
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
   }, [filteredRecords, vendorUnitFilter]);
@@ -239,7 +251,7 @@ export function Dashboard() {
 
   const maxAging = Math.max(1, ...Object.values(agingBuckets));
 
-  const exportDueSoonExcel = () => {
+  const exportDueSoonExcel = async () => {
     const rows = dueSoonRecords.map((r) => [
       r.record_number,
       r.vendor_name || "Unknown Vendor",
@@ -250,15 +262,20 @@ export function Dashboard() {
       r.due_date,
       r.dueInDays,
     ]);
-    downloadExcel(
-      "dashboard_due_soon_snapshot.xlsx",
-      "Due Soon",
-      ["record_number", "vendor", "department", "stage", "alert_level", "quantity", "due_date", "due_in_days"],
-      rows,
-    );
+    try {
+      const saved = await downloadExcelFile(
+        "dashboard_due_soon_snapshot.xlsx",
+        "Due Soon",
+        ["record_number", "vendor", "department", "stage", "alert_level", "quantity", "due_date", "due_in_days"],
+        rows,
+      );
+      if (saved) showToast("Excel export ready.", "success");
+    } catch (e) {
+      showToast(e?.message || "Export failed", "error");
+    }
   };
 
-  const exportTopVendorsExcel = () => {
+  const exportTopVendorsExcel = async () => {
     const rows = topVendors.map((v) => [
       v.name,
       vendorUnitFilter === "all" ? "mixed" : vendorUnitFilter,
@@ -266,12 +283,17 @@ export function Dashboard() {
       v.quantity.toFixed(2),
       v.count > 0 ? (v.quantity / v.count).toFixed(2) : "0.00",
     ]);
-    downloadExcel(
-      "dashboard_top_vendors_snapshot.xlsx",
-      "Top Vendors",
-      ["vendor", "unit", "record_count", "total_quantity", "avg_quantity_per_record"],
-      rows,
-    );
+    try {
+      const saved = await downloadExcelFile(
+        "dashboard_top_vendors_snapshot.xlsx",
+        "Top Vendors",
+        ["vendor", "unit", "record_count", "total_quantity", "avg_quantity_per_record"],
+        rows,
+      );
+      if (saved) showToast("Excel export ready.", "success");
+    } catch (e) {
+      showToast(e?.message || "Export failed", "error");
+    }
   };
 
   const clearFilters = () => {
@@ -280,12 +302,23 @@ export function Dashboard() {
     setVendorUnitFilter("all");
     setDateFrom("");
     setDateTo("");
-    setLookbackDays(30);
+    setLookbackDays(0);
   };
 
   return (
     <div>
-      <h2 style={{ color: "var(--clr-text-bright)", marginTop: 0 }}>Dashboard</h2>
+      <div className="dashboard-page__intro" style={{ marginBottom: "1rem" }}>
+        <h2 className="dashboard-page__title" style={{ color: "var(--clr-text-bright)", marginTop: 0, marginBottom: "0.35rem" }}>
+          Dashboard
+        </h2>
+        <p style={{ margin: "0 0 0.25rem", opacity: 0.92 }}>
+          Hello {user?.full_name || user?.username || "there"}
+          <span aria-hidden> 👋</span>
+        </p>
+        <p style={{ margin: 0, maxWidth: "44rem", lineHeight: 1.5, opacity: 0.82, fontSize: "0.9rem" }}>
+          Numbers below match your date window and filters (up to 250 records loaded here).
+        </p>
+      </div>
 
       <div className="card" style={{ marginBottom: "1rem", padding: "0.85rem 1rem" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
@@ -360,34 +393,95 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-          gap: "1rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <KPICard label="Total Records" value={total} />
+      <div className="dashboard-kpi-grid">
+        <KPICard
+          variant="total"
+          label="Total records"
+          hint="Records in this date window and filters."
+          value={total}
+          subtext="Same as Scope above."
+          onClick={() => goRecords({})}
+        />
 
         <KPICard
-          label="My Queue"
+          variant="queue"
+          label="My queue"
+          hint="Waiting for you at your stage."
           value={queueCount}
           onClick={() => navigate("/queue")}
-          subtext="Click to open"
+          subtext="Not limited by the date window."
         />
-
-        <KPICard label="Active Records" value={activeApprox} />
-
-        <KPICard label="Overdue" value={overdueCount} subtext="Past due and not completed" />
 
         <KPICard
-          label="Completion Rate"
-          value={`${completionRate}%`}
-          subtext={`${completedInScope} completed in scope`}
+          variant="active"
+          label="Active records"
+          hint="Not completed yet."
+          value={activeApprox}
+          subtext="In this scope."
+          onClick={() => goRecords({ exclude_completed: true })}
         />
 
-        <KPICard label="Avg Quantity" value={avgQuantity} subtext="Average units per record" />
+        <KPICard
+          variant="overdue"
+          label="Overdue"
+          hint="Past due and still open."
+          value={overdueCount}
+          subtext="Compared to today."
+          onClick={() => goRecords({ overdue: true })}
+        />
+
+        <KPICard
+          variant="completion"
+          label="Completion rate"
+          hint="Finished (completed) in this scope."
+          value={`${completionRate}%`}
+          subtext={`${completedInScope} of ${completionBase || 0} in scope.`}
+          onClick={() => goRecords({ alert_level: "completed" })}
+        />
+      </div>
+
+      <div className="card" style={{ marginBottom: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Due Soon (next 7 days)</div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="button" className="btn btn-ghost" onClick={() => void exportDueSoonExcel()}>
+              Export Excel
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => goRecords({})}>
+              View records
+            </button>
+          </div>
+        </div>
+        {dueSoonRecords.length === 0 ? (
+          <div style={{ opacity: 0.72, fontSize: "0.82rem" }}>No records due in the next 7 days for the selected scope.</div>
+        ) : (
+          dueSoonRecords.slice(0, 8).map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => navigate(`/records/${r.id}`)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                background: "transparent",
+                color: "inherit",
+                border: "1px solid var(--clr-border)",
+                borderRadius: "8px",
+                padding: "0.55rem 0.7rem",
+                marginBottom: "0.45rem",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                <span>{r.record_number}</span>
+                <span style={{ opacity: 0.8 }}>due in {r.dueInDays} day(s)</span>
+              </div>
+              <div style={{ fontSize: "0.78rem", opacity: 0.75, marginTop: "0.2rem" }}>
+                {r.vendor_name || "Unknown Vendor"} - {STAGE_LABELS[Number(r.current_stage)] || "Stage"}
+              </div>
+            </button>
+          ))
+        )}
       </div>
 
       <div
@@ -459,7 +553,12 @@ export function Dashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1rem" }}>
         {!analyticsError && (
           <div>
-            <StageDistributionCard data={analytics?.stage || []} loading={analyticsLoading} />
+            <StageDistributionCard
+              data={analytics?.stage || []}
+              loading={analyticsLoading}
+              hint="How many records sit at each workflow stage in this scope."
+            />
+
             <div style={{ marginTop: "0.55rem", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
               {[1, 2, 3, 4, 5].map((stage) => (
                 <button
@@ -482,7 +581,12 @@ export function Dashboard() {
 
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
-            <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Top Vendors by Volume</div>
+            <div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Top Vendors by Volume</div>
+              <div style={{ fontSize: "0.78rem", opacity: 0.75, marginTop: "0.25rem", fontWeight: 500 }}>
+                Highest total quantity in this scope. Click a name for contact details.
+              </div>
+            </div>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <select
                 value={vendorUnitFilter}
@@ -502,7 +606,7 @@ export function Dashboard() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="btn btn-ghost" onClick={exportTopVendorsExcel}>
+              <button type="button" className="btn btn-ghost" onClick={() => void exportTopVendorsExcel()}>
                 Export Excel
               </button>
             </div>
@@ -514,19 +618,42 @@ export function Dashboard() {
           ) : (
             topVendors.map((v) => (
               <div
-                key={v.name}
+                key={v.vendor_id || v.name}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   padding: "0.45rem 0",
                   borderBottom: "1px dashed rgba(255,255,255,0.12)",
                   fontSize: "0.82rem",
+                  alignItems: "center",
+                  gap: "0.5rem",
                 }}
               >
-                <span style={{ maxWidth: "62%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{
+                    maxWidth: "62%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    justifyContent: "flex-start",
+                    fontWeight: 600,
+                    padding: "0.15rem 0.35rem",
+                    margin: "-0.15rem -0.35rem",
+                  }}
+                  title="Vendor contact"
+                  onClick={() => {
+                    if (v.vendor_id) {
+                      setVendorModal({ vendorId: v.vendor_id, fallbackName: v.name });
+                    } else {
+                      setVendorModal({ detail: { name: v.name, contact: "", address: "", notes: "" } });
+                    }
+                  }}
+                >
                   {v.name}
-                </span>
-                <span>
+                </button>
+                <span style={{ flexShrink: 0 }}>
                   {v.quantity.toFixed(1)} {vendorUnitFilter === "all" ? "qty" : vendorUnitFilter} ({v.count})
                 </span>
               </div>
@@ -592,51 +719,20 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: "1rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Due Soon (next 7 days)</div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="btn btn-ghost" onClick={exportDueSoonExcel}>Export Excel</button>
-            <button type="button" className="btn btn-ghost" onClick={() => navigate("/records")}>View Records</button>
-          </div>
-        </div>
-        {dueSoonRecords.length === 0 ? (
-          <div style={{ opacity: 0.72, fontSize: "0.82rem" }}>No records due in the next 7 days for the selected scope.</div>
-        ) : (
-          dueSoonRecords.slice(0, 8).map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => navigate(`/records/${r.id}`)}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                background: "transparent",
-                color: "inherit",
-                border: "1px solid var(--clr-border)",
-                borderRadius: "8px",
-                padding: "0.55rem 0.7rem",
-                marginBottom: "0.45rem",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
-                <span>{r.record_number}</span>
-                <span style={{ opacity: 0.8 }}>due in {r.dueInDays} day(s)</span>
-              </div>
-              <div style={{ fontSize: "0.78rem", opacity: 0.75, marginTop: "0.2rem" }}>
-                {r.vendor_name || "Unknown Vendor"} - {STAGE_LABELS[Number(r.current_stage)] || "Stage"}
-              </div>
-            </button>
-          ))
-        )}
-      </div>
-
       {analyticsError && (
         <div style={{ padding: "1rem", opacity: 0.6, fontSize: "0.85rem" }}>
           Analytics endpoint unavailable. Dashboard still uses live records and queue data.
         </div>
       )}
+
+      {vendorModal ? (
+        <VendorContactModal
+          onClose={() => setVendorModal(null)}
+          detail={vendorModal.detail}
+          vendorId={vendorModal.vendorId}
+          fallbackName={vendorModal.fallbackName}
+        />
+      ) : null}
     </div>
   );
 }

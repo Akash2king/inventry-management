@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore.js";
 import * as vendorsApi from "@/api/vendors.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
+import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
+import { downloadExcelFile } from "@/utils/excelExport.js";
 
 function getToken() {
   return useAuthStore.getState().accessToken;
@@ -18,6 +20,7 @@ export function VendorsPage() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [contactCardVendor, setContactCardVendor] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -35,6 +38,21 @@ export function VendorsPage() {
   useEffect(() => {
     load().catch(() => {});
   }, []);
+
+  async function exportVendorsExcel() {
+    if (rows.length === 0) {
+      showToast("No vendors to export.", "error");
+      return;
+    }
+    try {
+      const dataRows = rows.map((v) => [v.name || "", v.contact || "", v.address || "", v.notes || ""]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const saved = await downloadExcelFile(`vendors_export_${stamp}.xlsx`, "Vendors", ["name", "contact", "address", "notes"], dataRows);
+      if (saved) showToast(`Exported ${rows.length} vendor(s).`, "success");
+    } catch (e) {
+      showToast(e?.message || "Export failed", "error");
+    }
+  }
 
   async function onAdd(e) {
     e.preventDefault();
@@ -106,7 +124,23 @@ export function VendorsPage() {
         </p>
       )}
 
-      <div className="table-wrap" style={{ marginTop: "1.5rem" }}>
+      <div
+        style={{
+          marginTop: "1.5rem",
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.75rem",
+        }}
+      >
+        <h3 style={{ margin: 0, color: "var(--clr-text-bright)", fontSize: "1rem" }}>Vendor list</h3>
+        <button type="button" className="btn btn-ghost" disabled={loading || rows.length === 0} onClick={() => void exportVendorsExcel()}>
+          Export Excel
+        </button>
+      </div>
+
+      <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
         <table className="data-table">
           <thead>
             <tr>
@@ -133,7 +167,12 @@ export function VendorsPage() {
             ) : null}
             {!loading &&
               rows.map((v) => (
-                <tr key={v.id}>
+                <tr
+                  key={v.id}
+                  onClick={() => setContactCardVendor(v)}
+                  style={{ cursor: "pointer" }}
+                  title="View contact card"
+                >
                   <td style={{ fontWeight: 600 }}>{v.name}</td>
                   <td>{v.contact || "—"}</td>
                   <td style={{ maxWidth: 220, fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>
@@ -147,6 +186,10 @@ export function VendorsPage() {
           </tbody>
         </table>
       </div>
+
+      {contactCardVendor ? (
+        <VendorContactModal detail={contactCardVendor} onClose={() => setContactCardVendor(null)} />
+      ) : null}
     </div>
   );
 }

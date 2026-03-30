@@ -149,6 +149,8 @@ function createBrowserApi(baseUrl) {
           json: data,
           token: tokenArg,
         }),
+      remove: async (id, tokenArg) =>
+        request("DELETE", `records/vendors/${id}/`, { token: tokenArg }),
     },
     records: {
       getAll: async (filters) => {
@@ -175,11 +177,11 @@ function createBrowserApi(baseUrl) {
           typeof payload === "string"
             ? { note: payload ?? "" }
             : {
-                note: payload?.note ?? "",
-                ...(payload?.next_holder_id
-                  ? { next_holder_id: payload.next_holder_id }
-                  : {}),
-              };
+              note: payload?.note ?? "",
+              ...(payload?.next_holder_id
+                ? { next_holder_id: payload.next_holder_id }
+                : {}),
+            };
         return request("POST", `records/${id}/forward/`, {
           json: body,
           token: tokenArg,

@@ -15,7 +15,7 @@ export function Header() {
 
   return (
     <header className="header-bar">
-      <h1>Waste Oil Manager</h1>
+      <h1>Waste Management</h1>
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
         <div
           style={{

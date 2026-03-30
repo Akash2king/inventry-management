@@ -1,8 +1,21 @@
-export function StageDistributionCard({ data, loading }) {
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { chartTooltip } from "./chartTheme.js";
+
+const STAGE_LABELS = {
+  1: "Storeman",
+  2: "Treatment",
+  3: "Manager",
+  4: "Admin",
+  5: "GM",
+};
+
+const COLORS = ["#6ec8ff", "#4a90e2", "#7dd8ff", "#3578e5", "#ff9e58"];
+
+export function StageDistributionCard({ data, loading, hint, onStageClick, activeStage, footer }) {
   if (loading) {
     return (
-      <div className="card" style={{ padding: "2rem", textAlign: "center" }}>
-        <div style={{ opacity: 0.6 }}>Loading...</div>
+      <div className="card" style={{ padding: "2rem", textAlign: "center", minHeight: 280 }}>
+        <div style={{ opacity: 0.6 }}>Loading chart…</div>
       </div>
     );
   }
@@ -15,53 +28,71 @@ export function StageDistributionCard({ data, loading }) {
     );
   }
 
-  const maxCount = Math.max(...data.map((d) => d.count || 0));
-  const stages = {
-    1: "Storeman",
-    2: "Treatment",
-    3: "Manager",
-    4: "Admin",
-    5: "GM",
-  };
+  const pieData = data.map((item, i) => ({
+    name: STAGE_LABELS[item.current_stage] || `Stage ${item.current_stage}`,
+    value: item.count ?? 0,
+    stage: item.current_stage,
+    fill: COLORS[i % COLORS.length],
+  }));
 
   return (
     <div className="card">
-      <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1rem" }}>
+      <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: hint ? "0.35rem" : "0.5rem" }}>
         Records by Role
       </div>
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", height: "150px" }}>
-        {data.map((item) => {
-          const percentage = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
-          return (
-            <div
-              key={item.current_stage}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-              }}
+      {hint ? (
+        <div style={{ fontSize: "0.78rem", opacity: 0.75, marginBottom: "0.65rem", fontWeight: 500, lineHeight: 1.4 }}>
+          {hint}
+        </div>
+      ) : null}
+      <div style={{ width: "100%", height: 240 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={pieData}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={54}
+              outerRadius={88}
+              paddingAngle={2}
+              stroke="var(--clr-surface)"
+              strokeWidth={2}
             >
-              <div
-                style={{
-                  width: "100%",
-                  height: `${percentage}%`,
-                  background: "linear-gradient(180deg, #6ec8ff, #4a90e2)",
-                  borderRadius: "4px 4px 0 0",
-                  minHeight: "10px",
-                  transition: "all 0.2s ease",
-                  cursor: "pointer",
-                }}
-                title={`${stages[item.current_stage]}: ${item.count}`}
-              />
-              <div style={{ fontSize: "0.65rem", marginTop: "0.5rem", opacity: 0.7 }}>
-                {stages[item.current_stage]?.substring(0, 3)}
-              </div>
-              <div style={{ fontSize: "0.75rem", fontWeight: 600 }}>{item.count}</div>
-            </div>
-          );
-        })}
+              {pieData.map((entry) => (
+                <Cell
+                  key={entry.stage}
+                  fill={entry.fill}
+                  opacity={
+                    activeStage != null && Number(activeStage) !== Number(entry.stage) ? 0.35 : 1
+                  }
+                  style={{ cursor: onStageClick ? "pointer" : "default" }}
+                  onClick={() => onStageClick?.(entry.stage)}
+                />
+              ))}
+            </Pie>
+            <Tooltip {...chartTooltip} formatter={(value, name) => [`${value} records`, name]} />
+            <Legend
+              layout="horizontal"
+              verticalAlign="bottom"
+              wrapperStyle={{ fontSize: "0.72rem", paddingTop: 4 }}
+              formatter={(value) => value}
+            />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
+      {footer ? (
+        <div
+          style={{
+            marginTop: "0.75rem",
+            paddingTop: "0.75rem",
+            borderTop: "1px solid var(--clr-border)",
+          }}
+        >
+          {footer}
+        </div>
+      ) : null}
     </div>
   );
 }

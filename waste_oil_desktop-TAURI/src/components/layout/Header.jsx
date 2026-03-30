@@ -15,28 +15,16 @@ export function Header() {
 
   return (
     <header className="header-bar">
-      <h1>Waste Oil Manager</h1>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: "50%",
-            background: "var(--clr-border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "0.85rem",
-            fontWeight: 700,
-            color: "var(--clr-text-bright)",
-          }}
-        >
+      <h1>Waste Management</h1>
+      <div className="header-user">
+        <div className="header-user__meta">
+          <span className="header-user__name">{user?.full_name || user?.username || "User"}</span>
+          <span className="header-user__role">{user?.role || ""}</span>
+        </div>
+        <div className="header-user__avatar" aria-hidden>
           {initials(user)}
         </div>
-        <span style={{ fontSize: "0.85rem", textTransform: "capitalize" }}>
-          {user?.role || ""}
-        </span>
-        <button type="button" className="btn btn-ghost" onClick={() => logout()}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => logout()}>
           Logout
         </button>
       </div>

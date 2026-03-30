@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import * as XLSX from "xlsx";
 import { useRecordStore } from "@/store/recordStore.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
+import { useAuthStore } from "@/store/authStore.js";
 import { useAnalytics, KPICard, StageDistributionCard } from "@/components/dashboard/index.js";
+import { EntryTrendChart } from "@/components/dashboard/EntryTrendChart.jsx";
+import { AlertMixChart } from "@/components/dashboard/AlertMixChart.jsx";
+import { TopVendorsBarChart } from "@/components/dashboard/TopVendorsBarChart.jsx";
+import { DepartmentWorkloadChart } from "@/components/dashboard/DepartmentWorkloadChart.jsx";
+import { AgingBucketsChart } from "@/components/dashboard/AgingBucketsChart.jsx";
+import { buildRecordsSearch } from "@/components/dashboard/buildRecordsHref.js";
+import { formatDate, formatQty } from "@/utils/formatters.js";
+import { StatusBadge } from "@/components/records/StatusBadge.jsx";
+import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
+import { showToast } from "@/components/ui/ToastContainer.jsx";
+import { downloadExcelFile } from "@/utils/excelExport.js";
 
 const LOOKBACK_OPTIONS = [
   { label: "7D", value: 7 },
@@ -38,13 +49,6 @@ function dayDiff(fromDate, toDateValue) {
   return Math.ceil((d.getTime() - fromDate.getTime()) / 86400000);
 }
 
-function downloadExcel(filename, sheetName, headers, rows) {
-  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  XLSX.writeFile(workbook, filename);
-}
-
 function ageDays(record, today) {
   if (typeof record.days_elapsed === "number") return record.days_elapsed;
   const entry = toDate(record.entry_date);
@@ -64,6 +68,7 @@ function normalizeUnit(unit) {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const fetchAll = useRecordStore((s) => s.fetchAll);
   const records = useRecordStore((s) => s.records);
   const pagination = useRecordStore((s) => s.pagination);
@@ -71,12 +76,13 @@ export function Dashboard() {
   const queue = useWorkflowStore((s) => s.queue);
 
   const { analytics, loading: analyticsLoading, error: analyticsError } = useAnalytics();
-  const [lookbackDays, setLookbackDays] = useState(30);
+  const [lookbackDays, setLookbackDays] = useState(0);
   const [stageFilter, setStageFilter] = useState(null);
   const [alertFilter, setAlertFilter] = useState(null);
   const [vendorUnitFilter, setVendorUnitFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [vendorModal, setVendorModal] = useState(null);
 
   useEffect(() => {
     fetchAll({ page_size: 250 }).catch(() => {});
@@ -125,7 +131,37 @@ export function Dashboard() {
     });
   }, [records, cutoff, startDate, endDate, stageFilter, alertFilter]);
 
-  const total = pagination.count || records.length || 0;
+  const scopeForLinks = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      lookbackDays,
+      todayStart: today,
+    }),
+    [dateFrom, dateTo, lookbackDays, today],
+  );
+
+  const goRecords = (extra) => {
+    navigate(`/records${buildRecordsSearch(scopeForLinks, extra)}`);
+  };
+
+  const inProgressInScope = useMemo(
+    () =>
+      filteredRecords
+        .filter((r) => r.alert_level !== "completed")
+        .sort((a, b) => String(b.entry_date).localeCompare(String(a.entry_date))),
+    [filteredRecords],
+  );
+
+  const completedInScopeSorted = useMemo(
+    () =>
+      filteredRecords
+        .filter((r) => r.alert_level === "completed")
+        .sort((a, b) => String(b.entry_date).localeCompare(String(a.entry_date))),
+    [filteredRecords],
+  );
+
+  const total = filteredRecords.length;
   const queueCount = queue.length;
   const activeApprox = filteredRecords.filter((r) => r.alert_level !== "completed").length;
 
@@ -142,10 +178,6 @@ export function Dashboard() {
     .map((r) => ({ ...r, dueInDays: dayDiff(today, r.due_date) }))
     .filter((r) => r.dueInDays !== null && r.dueInDays >= 0 && r.dueInDays <= 7 && r.alert_level !== "completed")
     .sort((a, b) => a.dueInDays - b.dueInDays);
-
-  const avgQuantity = filteredRecords.length
-    ? (filteredRecords.reduce((sum, r) => sum + Number(r.quantity || 0), 0) / filteredRecords.length).toFixed(1)
-    : "0.0";
 
   const alertCounts = useMemo(() => {
     const counts = { green: 0, yellow: 0, red: 0, completed: 0 };
@@ -187,15 +219,18 @@ export function Dashboard() {
     filteredRecords
       .filter((r) => vendorUnitFilter === "all" || normalizeUnit(r.unit) === vendorUnitFilter)
       .forEach((r) => {
-      const name = r.vendor_name || "Unknown Vendor";
-      const qty = Number(r.quantity || 0);
-      const curr = map.get(name) || { count: 0, quantity: 0 };
-      curr.count += 1;
-      curr.quantity += qty;
-      map.set(name, curr);
+        const name = r.vendor_name || "Unknown Vendor";
+        const vid = r.vendor_id ? String(r.vendor_id) : null;
+        const key = vid || `name:${name}`;
+        const qty = Number(r.quantity || 0);
+        const curr = map.get(key) || { vendor_id: vid, name, count: 0, quantity: 0 };
+        curr.name = name;
+        if (vid) curr.vendor_id = vid;
+        curr.count += 1;
+        curr.quantity += qty;
+        map.set(key, curr);
       });
-    return Array.from(map.entries())
-      .map(([name, v]) => ({ name, ...v }))
+    return Array.from(map.values())
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
   }, [filteredRecords, vendorUnitFilter]);
@@ -239,7 +274,7 @@ export function Dashboard() {
 
   const maxAging = Math.max(1, ...Object.values(agingBuckets));
 
-  const exportDueSoonExcel = () => {
+  const exportDueSoonExcel = async () => {
     const rows = dueSoonRecords.map((r) => [
       r.record_number,
       r.vendor_name || "Unknown Vendor",
@@ -250,15 +285,20 @@ export function Dashboard() {
       r.due_date,
       r.dueInDays,
     ]);
-    downloadExcel(
-      "dashboard_due_soon_snapshot.xlsx",
-      "Due Soon",
-      ["record_number", "vendor", "department", "stage", "alert_level", "quantity", "due_date", "due_in_days"],
-      rows,
-    );
+    try {
+      const saved = await downloadExcelFile(
+        "dashboard_due_soon_snapshot.xlsx",
+        "Due Soon",
+        ["record_number", "vendor", "department", "stage", "alert_level", "quantity", "due_date", "due_in_days"],
+        rows,
+      );
+      if (saved) showToast("Excel export ready.", "success");
+    } catch (e) {
+      showToast(e?.message || "Export failed", "error");
+    }
   };
 
-  const exportTopVendorsExcel = () => {
+  const exportTopVendorsExcel = async () => {
     const rows = topVendors.map((v) => [
       v.name,
       vendorUnitFilter === "all" ? "mixed" : vendorUnitFilter,
@@ -266,12 +306,17 @@ export function Dashboard() {
       v.quantity.toFixed(2),
       v.count > 0 ? (v.quantity / v.count).toFixed(2) : "0.00",
     ]);
-    downloadExcel(
-      "dashboard_top_vendors_snapshot.xlsx",
-      "Top Vendors",
-      ["vendor", "unit", "record_count", "total_quantity", "avg_quantity_per_record"],
-      rows,
-    );
+    try {
+      const saved = await downloadExcelFile(
+        "dashboard_top_vendors_snapshot.xlsx",
+        "Top Vendors",
+        ["vendor", "unit", "record_count", "total_quantity", "avg_quantity_per_record"],
+        rows,
+      );
+      if (saved) showToast("Excel export ready.", "success");
+    } catch (e) {
+      showToast(e?.message || "Export failed", "error");
+    }
   };
 
   const clearFilters = () => {
@@ -280,14 +325,23 @@ export function Dashboard() {
     setVendorUnitFilter("all");
     setDateFrom("");
     setDateTo("");
-    setLookbackDays(30);
+    setLookbackDays(0);
   };
 
   return (
-    <div>
-      <h2 style={{ color: "var(--clr-text-bright)", marginTop: 0 }}>Dashboard</h2>
+    <div className="dashboard-page">
+      <div className="dashboard-page__intro">
+        <h2 className="dashboard-page__title">Dashboard</h2>
+        <p className="dashboard-page__greeting">
+          Hello {user?.full_name || user?.username || "there"}
+          <span aria-hidden> 👋</span>
+        </p>
+        <p className="dashboard-page__lede">
+          Numbers below match your date window and filters (up to 250 records loaded here).
+        </p>
+      </div>
 
-      <div className="card" style={{ marginBottom: "1rem", padding: "0.85rem 1rem" }}>
+      <div className="card dashboard-toolbar" style={{ marginBottom: "1rem", padding: "0.85rem 1rem" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
           <div style={{ opacity: 0.8, fontSize: "0.85rem", marginRight: "0.35rem" }}>Window:</div>
           {LOOKBACK_OPTIONS.map((opt) => (
@@ -360,244 +414,187 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-          gap: "1rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <KPICard label="Total Records" value={total} />
+      <div className="dashboard-kpi-grid">
+        <KPICard
+          variant="total"
+          label="Total records"
+          hint="Records in this date window and filters."
+          value={total}
+          subtext="Same as Scope above."
+          onClick={() => goRecords({})}
+        />
 
         <KPICard
-          label="My Queue"
+          variant="queue"
+          label="My queue"
+          hint="Waiting for you at your stage."
           value={queueCount}
           onClick={() => navigate("/queue")}
-          subtext="Click to open"
+          subtext="Not limited by the date window."
         />
-
-        <KPICard label="Active Records" value={activeApprox} />
-
-        <KPICard label="Overdue" value={overdueCount} subtext="Past due and not completed" />
 
         <KPICard
-          label="Completion Rate"
-          value={`${completionRate}%`}
-          subtext={`${completedInScope} completed in scope`}
+          variant="active"
+          label="Active records"
+          hint="Not completed yet."
+          value={activeApprox}
+          subtext="In this scope."
+          onClick={() => goRecords({ exclude_completed: true })}
         />
 
-        <KPICard label="Avg Quantity" value={avgQuantity} subtext="Average units per record" />
+        <KPICard
+          variant="overdue"
+          label="Overdue"
+          hint="Past due and still open."
+          value={overdueCount}
+          subtext="Compared to today."
+          onClick={() => goRecords({ overdue: true })}
+        />
+
+        <KPICard
+          variant="completion"
+          label="Completion rate"
+          hint="Finished (completed) in this scope."
+          value={`${completionRate}%`}
+          subtext={`${completedInScope} of ${completionBase || 0} in scope.`}
+          onClick={() => goRecords({ alert_level: "completed" })}
+        />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "2fr 1fr",
-          gap: "1rem",
-          marginBottom: "1rem",
-        }}
-      >
-        <div className="card">
-          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.6rem" }}>Entry Trend</div>
-          <div style={{ display: "flex", gap: "4px", alignItems: "flex-end", height: "160px" }}>
-            {trendData.map((point) => (
-              <div
-                key={point.date}
-                title={`${point.date}: ${point.count}`}
-                style={{
-                  flex: 1,
-                  minWidth: "4px",
-                  background: "linear-gradient(180deg, #7dd8ff, #3578e5)",
-                  borderRadius: "3px 3px 0 0",
-                  height: `${Math.max(6, (point.count / trendMax) * 100)}%`,
-                  opacity: point.count ? 1 : 0.25,
-                }}
-              />
-            ))}
+      <div className="dashboard-tables-grid">
+        <div className="card dashboard-table-card">
+          <div className="dashboard-table-card__head">
+            <h3 className="dashboard-table-card__title">In progress</h3>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => goRecords({ exclude_completed: true })}>
+              View all
+            </button>
           </div>
-          <div style={{ marginTop: "0.5rem", fontSize: "0.78rem", opacity: 0.7 }}>
-            Last {lookbackDays || "all"} days by entry date
+          <div className="table-wrap dashboard-table-wrap">
+            <table className="data-table data-table--compact">
+              <thead>
+                <tr>
+                  <th>Record</th>
+                  <th>Vendor</th>
+                  <th>Stage</th>
+                  <th>Alert</th>
+                  <th>Qty</th>
+                  <th>Entry</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inProgressInScope.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="dashboard-table-empty">
+                      No in-progress records in this scope.
+                    </td>
+                  </tr>
+                ) : (
+                  inProgressInScope.slice(0, 12).map((r) => (
+                    <tr key={r.id} onClick={() => navigate(`/records/${r.id}`)}>
+                      <td style={{ fontWeight: 600 }}>{r.record_number}</td>
+                      <td>
+                        {r.vendor_id ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ padding: "0.1rem 0.25rem", fontSize: "inherit", textAlign: "left" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVendorModal({
+                                vendorId: String(r.vendor_id),
+                                fallbackName: r.vendor_name || "Vendor",
+                              });
+                            }}
+                          >
+                            {r.vendor_name || "—"}
+                          </button>
+                        ) : (
+                          r.vendor_name || "—"
+                        )}
+                      </td>
+                      <td>{STAGE_LABELS[Number(r.current_stage)] || r.current_stage}</td>
+                      <td>
+                        <StatusBadge level={r.alert_level} />
+                      </td>
+                      <td>{formatQty(r.quantity, r.unit)}</td>
+                      <td>{formatDate(r.entry_date)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div className="card">
-          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.6rem" }}>Alert Mix</div>
-          {Object.entries(alertCounts).map(([level, count]) => {
-            const ratio = filteredRecords.length ? Math.round((count / filteredRecords.length) * 100) : 0;
-            const color =
-              level === "red" ? "#ff5f7a" : level === "yellow" ? "#ffcf5a" : level === "completed" ? "#4f86ff" : "#36d27e";
-            return (
-              <button
-                key={level}
-                type="button"
-                onClick={() => setAlertFilter(alertFilter === level ? null : level)}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  border: alertFilter === level ? "1px solid #6ec8ff" : "1px solid var(--clr-border)",
-                  borderRadius: "8px",
-                  background: "transparent",
-                  padding: "0.45rem 0.55rem",
-                  marginBottom: "0.45rem",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", textTransform: "capitalize" }}>
-                  <span>{level}</span>
-                  <span>{count} ({ratio}%)</span>
-                </div>
-                <div style={{ marginTop: "0.3rem", height: "6px", borderRadius: "999px", background: "rgba(255,255,255,0.08)" }}>
-                  <div style={{ width: `${ratio}%`, height: "100%", borderRadius: "999px", background: color }} />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1rem" }}>
-        {!analyticsError && (
-          <div>
-            <StageDistributionCard data={analytics?.stage || []} loading={analyticsLoading} />
-            <div style={{ marginTop: "0.55rem", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
-              {[1, 2, 3, 4, 5].map((stage) => (
-                <button
-                  key={stage}
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => setStageFilter(stageFilter === stage ? null : stage)}
-                  style={{
-                    padding: "0.25rem 0.55rem",
-                    border: stageFilter === stage ? "1px solid #6ec8ff" : "1px solid var(--clr-border)",
-                    fontSize: "0.78rem",
-                  }}
-                >
-                  {STAGE_LABELS[stage]}
-                </button>
-              ))}
-            </div>
+        <div className="card dashboard-table-card">
+          <div className="dashboard-table-card__head">
+            <h3 className="dashboard-table-card__title">Completed</h3>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => goRecords({ alert_level: "completed" })}>
+              View all
+            </button>
           </div>
-        )}
-
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
-            <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Top Vendors by Volume</div>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <select
-                value={vendorUnitFilter}
-                onChange={(e) => setVendorUnitFilter(e.target.value)}
-                style={{
-                  border: "1px solid var(--clr-border)",
-                  borderRadius: "8px",
-                  padding: "0.35rem 0.5rem",
-                  background: "var(--clr-surface)",
-                  color: "inherit",
-                  fontSize: "0.78rem",
-                }}
-              >
-                {unitOptions.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit === "all" ? "All Units" : unit}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="btn btn-ghost" onClick={exportTopVendorsExcel}>
-                Export Excel
-              </button>
-            </div>
+          <div className="table-wrap dashboard-table-wrap">
+            <table className="data-table data-table--compact">
+              <thead>
+                <tr>
+                  <th>Record</th>
+                  <th>Vendor</th>
+                  <th>Stage</th>
+                  <th>Qty</th>
+                  <th>Entry</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedInScopeSorted.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="dashboard-table-empty">
+                      No completed records in this scope.
+                    </td>
+                  </tr>
+                ) : (
+                  completedInScopeSorted.slice(0, 12).map((r) => (
+                    <tr key={r.id} onClick={() => navigate(`/records/${r.id}`)}>
+                      <td style={{ fontWeight: 600 }}>{r.record_number}</td>
+                      <td>
+                        {r.vendor_id ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ padding: "0.1rem 0.25rem", fontSize: "inherit", textAlign: "left" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVendorModal({
+                                vendorId: String(r.vendor_id),
+                                fallbackName: r.vendor_name || "Vendor",
+                              });
+                            }}
+                          >
+                            {r.vendor_name || "—"}
+                          </button>
+                        ) : (
+                          r.vendor_name || "—"
+                        )}
+                      </td>
+                      <td>{STAGE_LABELS[Number(r.current_stage)] || r.current_stage}</td>
+                      <td>{formatQty(r.quantity, r.unit)}</td>
+                      <td>{formatDate(r.entry_date)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-          {topVendors.length === 0 ? (
-            <div style={{ opacity: 0.7, fontSize: "0.82rem" }}>
-              No vendor data for selected unit.
-            </div>
-          ) : (
-            topVendors.map((v) => (
-              <div
-                key={v.name}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "0.45rem 0",
-                  borderBottom: "1px dashed rgba(255,255,255,0.12)",
-                  fontSize: "0.82rem",
-                }}
-              >
-                <span style={{ maxWidth: "62%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {v.name}
-                </span>
-                <span>
-                  {v.quantity.toFixed(1)} {vendorUnitFilter === "all" ? "qty" : vendorUnitFilter} ({v.count})
-                </span>
-              </div>
-            ))
-          )}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
-        <div className="card">
-          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.75rem" }}>Department Workload</div>
-          {departmentWorkload.length === 0 ? (
-            <div style={{ opacity: 0.7, fontSize: "0.82rem" }}>No department workload in current scope.</div>
-          ) : (
-            departmentWorkload.map((dept) => (
-              <div key={dept.name} style={{ marginBottom: "0.6rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem" }}>
-                  <span>{dept.name}</span>
-                  <span>{dept.active} active / {dept.completed} completed</span>
-                </div>
-                <div style={{ marginTop: "0.2rem", height: "7px", borderRadius: "999px", background: "rgba(255,255,255,0.08)" }}>
-                  <div
-                    style={{
-                      width: `${dept.total ? Math.round((dept.active / dept.total) * 100) : 0}%`,
-                      height: "100%",
-                      borderRadius: "999px",
-                      background: "linear-gradient(90deg, #ff9e58, #ff5f7a)",
-                    }}
-                  />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="card">
-          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.75rem" }}>Record Aging Buckets</div>
-          {Object.entries(agingBuckets).map(([label, count]) => (
-            <div key={label} style={{ marginBottom: "0.55rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem" }}>
-                <span>{label} days</span>
-                <span>{count}</span>
-              </div>
-              <div style={{ marginTop: "0.2rem", height: "7px", borderRadius: "999px", background: "rgba(255,255,255,0.08)" }}>
-                <div
-                  style={{
-                    width: `${Math.round((count / maxAging) * 100)}%`,
-                    height: "100%",
-                    borderRadius: "999px",
-                    background:
-                      label === "30+"
-                        ? "#ff5f7a"
-                        : label === "16-30"
-                          ? "#ff9e58"
-                          : label === "8-15"
-                            ? "#ffcf5a"
-                            : "#60c8ff",
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop: "1rem" }}>
+      <div className="card" style={{ marginBottom: "1rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
           <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Due Soon (next 7 days)</div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button type="button" className="btn btn-ghost" onClick={exportDueSoonExcel}>Export Excel</button>
-            <button type="button" className="btn btn-ghost" onClick={() => navigate("/records")}>View Records</button>
+            <button type="button" className="btn btn-ghost" onClick={() => goRecords({})}>
+              View records
+            </button>
           </div>
         </div>
         {dueSoonRecords.length === 0 ? (
@@ -632,11 +629,205 @@ export function Dashboard() {
         )}
       </div>
 
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: "1rem",
+          marginBottom: "1rem",
+        }}
+      >
+        <div className="card">
+          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.6rem" }}>Entry Trend</div>
+          <EntryTrendChart data={trendData} lookbackDays={lookbackDays} trendMax={trendMax} />
+        </div>
+
+        <div className="card">
+          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.35rem" }}>Alert Mix</div>
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.72rem", opacity: 0.72, lineHeight: 1.4 }}>
+            Click a slice to filter by alert level.
+          </p>
+          <AlertMixChart
+            data={alertCounts}
+            total={filteredRecords.length}
+            activeLevel={alertFilter}
+            onSegmentClick={(level) => setAlertFilter(alertFilter === level ? null : level)}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1rem" }}>
+        {!analyticsError && (
+          <StageDistributionCard
+            data={analytics?.stage || []}
+            loading={analyticsLoading}
+            hint="How many records sit at each workflow stage in this scope. Click a slice to filter."
+            activeStage={stageFilter}
+            onStageClick={(stage) => setStageFilter(stageFilter === stage ? null : stage)}
+            footer={
+              <div>
+                <div style={{ fontSize: "0.72rem", opacity: 0.72, marginBottom: "0.5rem" }}>Filter by stage</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                  {[1, 2, 3, 4, 5].map((stage) => (
+                    <button
+                      key={stage}
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setStageFilter(stageFilter === stage ? null : stage)}
+                      style={{
+                        padding: "0.25rem 0.55rem",
+                        border: stageFilter === stage ? "1px solid #6ec8ff" : "1px solid var(--clr-border)",
+                        fontSize: "0.78rem",
+                      }}
+                    >
+                      {STAGE_LABELS[stage]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+          />
+        )}
+
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: "0.65rem",
+              marginBottom: "0.75rem",
+            }}
+          >
+            <div style={{ flex: "1 1 12rem", minWidth: 0 }}>
+              <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Top Vendors by Volume</div>
+              <div style={{ fontSize: "0.78rem", opacity: 0.75, marginTop: "0.25rem", fontWeight: 500, lineHeight: 1.4 }}>
+                Highest total quantity in this scope.
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", alignItems: "center", flexShrink: 0 }}>
+              <select
+                value={vendorUnitFilter}
+                onChange={(e) => setVendorUnitFilter(e.target.value)}
+                style={{
+                  border: "1px solid var(--clr-border)",
+                  borderRadius: "8px",
+                  padding: "0.3rem 0.45rem",
+                  background: "var(--clr-surface)",
+                  color: "inherit",
+                  fontSize: "0.78rem",
+                }}
+              >
+                {unitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit === "all" ? "All Units" : unit}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => void exportTopVendorsExcel()}
+                style={{ fontSize: "0.78rem", padding: "0.3rem 0.55rem", whiteSpace: "nowrap" }}
+              >
+                Export Excel
+              </button>
+            </div>
+          </div>
+          {topVendors.length === 0 ? (
+            <div style={{ opacity: 0.7, fontSize: "0.82rem" }}>
+              No vendor data for selected unit.
+            </div>
+          ) : (
+            <>
+              <TopVendorsBarChart
+                rows={topVendors}
+                unitLabel={vendorUnitFilter}
+                onBarClick={(v) => {
+                  if (v.vendor_id) {
+                    setVendorModal({ vendorId: v.vendor_id, fallbackName: v.name });
+                  } else {
+                    setVendorModal({ detail: { name: v.name, contact: "", address: "", notes: "" } });
+                  }
+                }}
+              />
+              <p style={{ margin: "0.85rem 0 0.4rem", fontSize: "0.72rem", opacity: 0.72, lineHeight: 1.4 }}>
+                Click a bar or a vendor chip for contact details.
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.4rem",
+                  paddingTop: "0.15rem",
+                }}
+              >
+                {topVendors.map((v) => (
+                  <button
+                    key={v.vendor_id || v.name}
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: "0.72rem", padding: "0.25rem 0.5rem" }}
+                    title="Vendor contact"
+                    onClick={() => {
+                      if (v.vendor_id) {
+                        setVendorModal({ vendorId: v.vendor_id, fallbackName: v.name });
+                      } else {
+                        setVendorModal({ detail: { name: v.name, contact: "", address: "", notes: "" } });
+                      }
+                    }}
+                  >
+                    {v.name.length > 28 ? `${v.name.slice(0, 26)}…` : v.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
+        <div className="card">
+          <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.5rem" }}>Department Workload</div>
+          <p style={{ margin: "0 0 0.65rem", fontSize: "0.72rem", opacity: 0.72, lineHeight: 1.4 }}>
+            Stacked bars: active vs completed by department.
+          </p>
+          {departmentWorkload.length === 0 ? (
+            <div style={{ opacity: 0.7, fontSize: "0.82rem" }}>No department workload in current scope.</div>
+          ) : (
+            <DepartmentWorkloadChart departments={departmentWorkload} />
+          )}
+        </div>
+
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>Record Aging Buckets</div>
+            <button type="button" className="btn btn-ghost" style={{ fontSize: "0.78rem", padding: "0.25rem 0.55rem" }} onClick={() => goRecords({ exclude_completed: true })}>
+              Open active in list
+            </button>
+          </div>
+          <p style={{ margin: "0 0 0.65rem", fontSize: "0.72rem", opacity: 0.72, lineHeight: 1.4 }}>
+            Open records only, by days since entry.
+          </p>
+          <AgingBucketsChart buckets={agingBuckets} maxCount={maxAging} />
+        </div>
+      </div>
+
       {analyticsError && (
         <div style={{ padding: "1rem", opacity: 0.6, fontSize: "0.85rem" }}>
           Analytics endpoint unavailable. Dashboard still uses live records and queue data.
         </div>
       )}
+
+      {vendorModal ? (
+        <VendorContactModal
+          onClose={() => setVendorModal(null)}
+          detail={vendorModal.detail}
+          vendorId={vendorModal.vendorId}
+          fallbackName={vendorModal.fallbackName}
+        />
+      ) : null}
     </div>
   );
 }

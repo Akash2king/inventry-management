@@ -8,10 +8,12 @@ contextBridge.exposeInMainWorld("api", {
   },
   vendors: {
     list: (token) => ipcRenderer.invoke("vendors:list", { token }),
+    get: (id, token) => ipcRenderer.invoke("vendors:get", { id, token }),
     create: (data, token) =>
       ipcRenderer.invoke("vendors:create", { data, token }),
     update: (id, data, token) =>
       ipcRenderer.invoke("vendors:update", { id, data, token }),
+    remove: (id, token) => ipcRenderer.invoke("vendors:remove", { id, token }),
   },
   records: {
     getAll: (filters, token) =>

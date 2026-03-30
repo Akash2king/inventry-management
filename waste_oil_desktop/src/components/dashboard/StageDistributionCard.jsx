@@ -1,4 +1,4 @@
-export function StageDistributionCard({ data, loading }) {
+export function StageDistributionCard({ data, loading, hint }) {
   if (loading) {
     return (
       <div className="card" style={{ padding: "2rem", textAlign: "center" }}>
@@ -26,9 +26,14 @@ export function StageDistributionCard({ data, loading }) {
 
   return (
     <div className="card">
-      <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1rem" }}>
+      <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: hint ? "0.35rem" : "1rem" }}>
         Records by Role
       </div>
+      {hint ? (
+        <div style={{ fontSize: "0.78rem", opacity: 0.75, marginBottom: "0.85rem", fontWeight: 500, lineHeight: 1.4 }}>
+          {hint}
+        </div>
+      ) : null}
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", height: "150px" }}>
         {data.map((item) => {
           const percentage = maxCount > 0 ? (item.count / maxCount) * 100 : 0;

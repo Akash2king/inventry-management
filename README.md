@@ -234,8 +234,13 @@ Windows PowerShell:
 # Rust toolchain
 winget install --id Rustlang.Rustup -e
 
-# Microsoft C++ Build Tools
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e
+# Microsoft C++ Build Tools (must include MSVC; plain Build Tools has no C++ by default)
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+
+# If winget says Build Tools is already installed but Rust still cannot find link.exe / vcvars64.bat,
+# the C++ workload was never selected. winget upgrade will not add it. Either open Visual Studio
+# Installer -> Modify -> add Desktop development with C++, or from waste_oil_desktop-TAURI run
+# (elevated): npm run add-msvc
 
 # WebView2 runtime (often preinstalled)
 winget install --id Microsoft.EdgeWebView2Runtime -e
@@ -303,6 +308,8 @@ npm install
 cp .env.example .env  # Windows: Copy-Item .env.example .env
 npm run dev
 ```
+
+On **Windows**, Rust needs the MSVC linker (`link.exe`). Install the C++ workload (see the Windows `winget` line above). `npm run dev` / `npm run build` run `scripts/run-tauri.js`, which on Windows calls `scripts/build-with-msvc.ps1` so `vcvars64.bat` is loaded and Cargo sees `link.exe` (including in Cursor’s terminal). You can still open **Developer PowerShell for VS** if you prefer. If Build Tools is already installed without C++, use **Visual Studio Installer → Modify** or run **`npm run add-msvc`** (as Administrator) from `waste_oil_desktop-TAURI`.
 
 ## Build commands
 

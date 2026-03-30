@@ -2,7 +2,7 @@
   "name": "waste-oil-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Waste Oil Management System — Electron + React desktop client",
+  "description": "Waste management — Electron + React desktop client",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env NODE_ENV=development electron .\"",
