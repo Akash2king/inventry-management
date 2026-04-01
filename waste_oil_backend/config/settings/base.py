@@ -139,6 +139,13 @@ _DEFAULT_CORS_DEV_ORIGINS = [
 ]
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_from_env + _DEFAULT_CORS_DEV_ORIGINS))
 
+# In production the packaged Tauri app uses a custom scheme (tauri://localhost),
+# which django-cors-headers cannot express via CORS_ALLOWED_ORIGINS (it expects
+# http/https). For this internal desktop deployment we allow all origins by
+# default, controlled by an env flag if you ever need to tighten it.
+if os.environ.get("CORS_ALLOW_ALL_ORIGINS", "true").lower() in ("1", "true", "yes"):
+    CORS_ALLOW_ALL_ORIGINS = True
+
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
@@ -158,9 +165,41 @@ CELERY_TASK_ALWAYS_EAGER = os.environ.get(
 ).lower() in ("1", "true", "yes")
 CELERY_TASK_EAGER_PROPAGATES = True
 
+# How many days the SLA window lasts when the storeman does not explicitly set a due_date.
 SLA_DAYS = int(os.environ.get("SLA_DAYS", "30"))
-YELLOW_THRESHOLD = int(os.environ.get("YELLOW_THRESHOLD", "21"))
-RED_THRESHOLD = int(os.environ.get("RED_THRESHOLD", "26"))
+
+# Alert levels are now based on the percentage of the SLA window that has elapsed between
+# entry_date and due_date instead of absolute days from entry.
+# Example defaults:
+#   < 60%  -> green
+#   60–79% -> yellow
+#   80–89% -> orange
+#   >= 90% -> red
+ALERT_YELLOW_PERCENT = int(os.environ.get("ALERT_YELLOW_PERCENT", "60"))
+ALERT_ORANGE_PERCENT = int(os.environ.get("ALERT_ORANGE_PERCENT", "80"))
+ALERT_RED_PERCENT = int(os.environ.get("ALERT_RED_PERCENT", "90"))
+
+# Backwards‑compatibility: if legacy absolute thresholds are provided but the new
+# percentage‑based variables are not, derive rough equivalents so existing installs
+# continue to behave reasonably until they are migrated.
+_legacy_yellow = os.environ.get("YELLOW_THRESHOLD")
+_legacy_red = os.environ.get("RED_THRESHOLD")
+if _legacy_yellow and not os.environ.get("ALERT_YELLOW_PERCENT"):
+    try:
+        ALERT_YELLOW_PERCENT = max(10, min(90, int(_legacy_yellow) * 100 // SLA_DAYS))
+    except ValueError:
+        pass
+if _legacy_red and not os.environ.get("ALERT_RED_PERCENT"):
+    try:
+        ALERT_RED_PERCENT = max(10, min(99, int(_legacy_red) * 100 // SLA_DAYS))
+    except ValueError:
+        pass
+
+# Optional switch to fully disable outbound email notifications without breaking anything.
+EMAIL_NOTIFICATIONS_ENABLED = (
+    os.environ.get("EMAIL_NOTIFICATIONS_ENABLED", "true").lower()
+    in ("1", "true", "yes")
+)
 
 try:
     import config.celery  # noqa: F401 — register Celery app and task modules

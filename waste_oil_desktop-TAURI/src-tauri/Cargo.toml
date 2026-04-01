@@ -1,7 +1,7 @@
 [package]
 name = "waste_oil_desktop_tauri"
 version = "0.1.0"
-description = "Waste Oil Management desktop client powered by Tauri"
+description = "Waste Management desktop client powered by Tauri"
 edition = "2021"
 build = "build.rs"
 

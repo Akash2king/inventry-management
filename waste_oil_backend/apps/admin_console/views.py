@@ -57,9 +57,21 @@ def records_by_alert_level(_request):
     """
     Return distribution of records by alert level.
     """
-    data = (
-        WasteOilRecord.objects.values("alert_level")
-        .annotate(count=Count("id"))
-        .order_by("-count")
-    )
+    counts = {
+        "green": 0,
+        "yellow": 0,
+        "orange": 0,
+        "red": 0,
+        "completed": 0,
+    }
+    for record in WasteOilRecord.objects.all().only(
+        "alert_level", "is_locked", "entry_date", "due_date"
+    ):
+        level = record.computed_alert_level
+        key = (level or "green").lower()
+        if key in counts:
+            counts[key] += 1
+
+    data = [{"alert_level": k, "count": v} for k, v in counts.items()]
+    data.sort(key=lambda row: row["count"], reverse=True)
     return Response(data)

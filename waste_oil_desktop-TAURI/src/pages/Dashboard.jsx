@@ -180,9 +180,12 @@ export function Dashboard() {
     .sort((a, b) => a.dueInDays - b.dueInDays);
 
   const alertCounts = useMemo(() => {
-    const counts = { green: 0, yellow: 0, red: 0, completed: 0 };
+    const counts = { green: 0, yellow: 0, orange: 0, red: 0, completed: 0 };
     filteredRecords.forEach((r) => {
-      if (counts[r.alert_level] !== undefined) counts[r.alert_level] += 1;
+      const key = (r.alert_level || "green").toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(counts, key)) {
+        counts[key] += 1;
+      }
     });
     return counts;
   }, [filteredRecords]);

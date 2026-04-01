@@ -226,6 +226,7 @@ export function RecordList() {
             <option value="">All</option>
             <option value="green">Green</option>
             <option value="yellow">Yellow</option>
+            <option value="orange">Orange</option>
             <option value="red">Red</option>
             <option value="completed">Completed</option>
           </select>

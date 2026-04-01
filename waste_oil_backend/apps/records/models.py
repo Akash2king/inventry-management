@@ -31,6 +31,7 @@ class WasteOilRecord(models.Model):
     class AlertLevel(models.TextChoices):
         GREEN = "green", "Green"
         YELLOW = "yellow", "Yellow"
+        ORANGE = "orange", "Orange"
         RED = "red", "Red"
         COMPLETED = "completed", "Completed"
 
@@ -113,19 +114,37 @@ class WasteOilRecord(models.Model):
         if self.is_locked or self.alert_level == self.AlertLevel.COMPLETED:
             return self.AlertLevel.COMPLETED
 
-        days = self.days_elapsed
-        yellow = SystemConfig.get_value(
-            "YELLOW_THRESHOLD",
-            default=getattr(settings, "YELLOW_THRESHOLD", 21),
-            cast=int,
-        )
-        red = SystemConfig.get_value(
-            "RED_THRESHOLD",
-            default=getattr(settings, "RED_THRESHOLD", 26),
-            cast=int,
-        )
-        if days >= red:
+        # SLA window is defined as the number of days between entry_date and due_date.
+        # We compute how much of that window has elapsed and map to alert bands.
+        today: date = timezone.now().date()
+        total_days = (self.due_date - self.entry_date).days
+        # If due_date is not after entry_date, treat this as an immediate red SLA breach.
+        if total_days <= 0:
             return self.AlertLevel.RED
-        if days >= yellow:
+
+        elapsed_days = max(0, (today - self.entry_date).days)
+        progress = (elapsed_days / total_days) * 100
+
+        yellow_pct = SystemConfig.get_value(
+            "ALERT_YELLOW_PERCENT",
+            default=getattr(settings, "ALERT_YELLOW_PERCENT", 60),
+            cast=int,
+        )
+        orange_pct = SystemConfig.get_value(
+            "ALERT_ORANGE_PERCENT",
+            default=getattr(settings, "ALERT_ORANGE_PERCENT", 80),
+            cast=int,
+        )
+        red_pct = SystemConfig.get_value(
+            "ALERT_RED_PERCENT",
+            default=getattr(settings, "ALERT_RED_PERCENT", 90),
+            cast=int,
+        )
+
+        if progress >= red_pct:
+            return self.AlertLevel.RED
+        if progress >= orange_pct:
+            return self.AlertLevel.ORANGE
+        if progress >= yellow_pct:
             return self.AlertLevel.YELLOW
         return self.AlertLevel.GREEN

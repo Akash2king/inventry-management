@@ -1,6 +1,51 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
+import "./login.css";
+
+function IconUser() {
+  return (
+    <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.118a7.5 7.5 0 0 1 15 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    </svg>
+  );
+}
+
+function IconLock() {
+  return (
+    <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+    </svg>
+  );
+}
+
+function IconLogo() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2.25c-2.8 3.5-5 6.8-5 10.25a5 5 0 1 0 10 0c0-3.45-2.2-6.75-5-10.25Z"
+        fill="url(#loginLogoGrad)"
+      />
+      <defs>
+        <linearGradient id="loginLogoGrad" x1="7" y1="2" x2="17" y2="14" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#3578e5" />
+          <stop offset="1" stopColor="#16a34a" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+function IconAlert() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2 1 21h22L12 2Zm0 15a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm-1-9v6h2V8h-2Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 export function Login() {
   const navigate = useNavigate();
@@ -39,66 +84,90 @@ export function Login() {
 
   if (isLoading) {
     return (
-      <div className="fullscreen-center">
-        <div className="spinner" />
+      <div className="login-page">
+        <div className="login-page__bg" aria-hidden />
+        <div className="login-page__shell" style={{ alignItems: "center", flex: 1, justifyContent: "center" }}>
+          <div className="spinner" />
+        </div>
       </div>
     );
   }
 
   if (typeof window !== "undefined" && !window.api) {
     return (
-      <div className="fullscreen-center">
-        <div className="card">
-          <p style={{ marginTop: 0 }}>API bridge is not available.</p>
-          <p style={{ fontSize: "0.9rem", opacity: 0.9 }}>
-            Set <code>VITE_API_BASE_URL</code> in <code>.env</code> (see <code>.env.example</code>)
-            so the browser/Tauri API shim can load, then run <code>npm run dev</code>.
-          </p>
+      <div className="login-page">
+        <div className="login-page__bg" aria-hidden />
+        <div className="login-page__shell">
+          <div className="login-card">
+            <h2 className="login-card__title" style={{ textAlign: "center" }}>
+              API setup required
+            </h2>
+            <p className="login-card__subtitle" style={{ textAlign: "center" }}>
+              The API bridge is not available.
+            </p>
+            <p style={{ fontSize: "0.9rem", opacity: 0.9, marginTop: "1rem", lineHeight: 1.5 }}>
+              Set <code>VITE_API_BASE_URL</code> in <code>.env</code> (see <code>.env.example</code>)
+              so the browser/Tauri API shim can load, then run <code>npm run dev</code>.
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fullscreen-center">
-      <div className="card" style={{ width: "min(400px, 92vw)" }}>
-        <h2 style={{ marginTop: 0, color: "var(--clr-text-bright)" }}>Sign In</h2>
-        <form onSubmit={onSubmit}>
-          <div className="field" style={{ marginBottom: "0.75rem" }}>
-            <label htmlFor="u">Username</label>
-            <input
-              id="u"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              style={{ width: "100%" }}
-            />
-          </div>
-          <div className="field" style={{ marginBottom: "0.75rem" }}>
-            <label htmlFor="p">Password</label>
-            <input
-              id="p"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%" }}
-            />
-          </div>
-          {error ? (
-            <div className="field-error" style={{ marginBottom: "0.75rem" }}>
-              {error}
+    <div className="login-page">
+      <div className="login-page__bg" aria-hidden />
+      <div className="login-page__shell">
+        <div className="login-card">
+          <div className="login-card__brand">
+            <div className="login-card__logo" aria-hidden>
+              <IconLogo />
             </div>
-          ) : null}
-          <button
-            type="submit"
-            className="btn btn-primary"
-            style={{ width: "100%" }}
-            disabled={busy}
-          >
-            {busy ? "Signing in…" : "Sign In"}
-          </button>
-        </form>
+            <h1 className="login-card__title">Welcome back</h1>
+            <p className="login-card__subtitle">Sign in to Waste Management</p>
+          </div>
+
+          <form onSubmit={onSubmit}>
+            <div className="login-field">
+              <label htmlFor="u">Username</label>
+              <div className="login-input-wrap">
+                <IconUser />
+                <input
+                  id="u"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Your username"
+                />
+              </div>
+            </div>
+            <div className="login-field">
+              <label htmlFor="p">Password</label>
+              <div className="login-input-wrap">
+                <IconLock />
+                <input
+                  id="p"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+            {error ? (
+              <div className="login-error" role="alert">
+                <IconAlert />
+                <span>{error}</span>
+              </div>
+            ) : null}
+            <button type="submit" className="login-submit" disabled={busy}>
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+        </div>
+        <p className="login-page__foot">Secure workspace access · Storeman and workflow tools</p>
       </div>
     </div>
   );

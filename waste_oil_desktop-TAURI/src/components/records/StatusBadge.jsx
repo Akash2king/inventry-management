@@ -6,6 +6,9 @@ export function StatusBadge({ level }) {
   if (l === "yellow") {
     return <span className="badge-yellow">🟡 Warning</span>;
   }
+  if (l === "orange") {
+    return <span className="badge-orange">🟠 Approaching SLA</span>;
+  }
   if (l === "red") {
     return <span className="badge-red">🔴 Overdue</span>;
   }

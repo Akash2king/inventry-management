@@ -12,7 +12,8 @@ def health(_request):
             "app": "alerts",
             "status": "ok",
             "sla_days": settings.SLA_DAYS,
-            "yellow_threshold": settings.YELLOW_THRESHOLD,
-            "red_threshold": settings.RED_THRESHOLD,
+            "alert_yellow_percent": settings.ALERT_YELLOW_PERCENT,
+            "alert_orange_percent": settings.ALERT_ORANGE_PERCENT,
+            "alert_red_percent": settings.ALERT_RED_PERCENT,
         }
     )

@@ -106,6 +106,11 @@ select {
   color: var(--clr-yellow);
 }
 
+.badge-orange {
+  background: rgba(252, 153, 80, 0.15);
+  color: #f97316;
+}
+
 .badge-red {
   background: rgba(240, 74, 90, 0.15);
   color: var(--clr-red);
@@ -122,6 +127,10 @@ select {
 
 .row-yellow {
   background: rgba(245, 200, 66, 0.06);
+}
+
+.row-orange {
+  background: rgba(252, 153, 80, 0.06);
 }
 
 .row-red {

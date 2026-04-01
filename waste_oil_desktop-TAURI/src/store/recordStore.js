@@ -19,8 +19,14 @@ export const useRecordStore = create((set) => ({
     try {
       const data = await recordsApi.getAll(filters, getToken());
       const results = data.results ?? data;
+      const normalized = (Array.isArray(results) ? results : []).map((r) => {
+        const level = r.computed_alert_level || r.alert_level;
+        return level && level !== r.alert_level
+          ? { ...r, alert_level: level }
+          : r;
+      });
       set({
-        records: Array.isArray(results) ? results : [],
+        records: normalized,
         pagination: {
           count: data.count ?? results?.length ?? 0,
           next: data.next ?? null,

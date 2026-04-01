@@ -119,7 +119,15 @@ def apply_list_filters(qs, request):
         if str(stage).isdigit():
             qs = qs.filter(current_stage=int(stage))
     if al := p.get("alert_level"):
-        qs = qs.filter(alert_level=al)
+        # For completed records we can safely filter on the stored column.
+        if al == WasteOilRecord.AlertLevel.COMPLETED:
+            qs = qs.filter(alert_level=al)
+        else:
+            # Other alert levels are derived from SLA percentage (entry_date → due_date).
+            # Filter using the model's computed_alert_level to ensure consistency with
+            # the dashboard and badges, then constrain the queryset by ids.
+            matching_ids = [r.id for r in qs if r.computed_alert_level == al]
+            qs = qs.filter(id__in=matching_ids)
     if dept := p.get("department_id"):
         qs = qs.filter(current_department_id=dept)
     if df := p.get("date_from"):

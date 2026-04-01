@@ -68,6 +68,7 @@ class StageTransitionSerializer(serializers.ModelSerializer):
 
 class RecordListSerializer(serializers.ModelSerializer):
     days_elapsed = serializers.SerializerMethodField()
+    computed_alert_level = serializers.SerializerMethodField()
     current_department_name = serializers.CharField(
         source="current_department.name", read_only=True, allow_null=True
     )
@@ -93,6 +94,7 @@ class RecordListSerializer(serializers.ModelSerializer):
             "due_date",
             "days_elapsed",
             "alert_level",
+            "computed_alert_level",
             "current_stage",
             "current_department_name",
             "current_holder_name",
@@ -104,6 +106,9 @@ class RecordListSerializer(serializers.ModelSerializer):
 
     def get_days_elapsed(self, obj):
         return obj.days_elapsed
+
+    def get_computed_alert_level(self, obj):
+        return obj.computed_alert_level
 
     def get_current_holder_name(self, obj):
         u = obj.current_holder
