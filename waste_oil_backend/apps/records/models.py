@@ -104,8 +104,14 @@ class WasteOilRecord(models.Model):
 
     @property
     def days_elapsed(self) -> int:
+        """Calendar days from entry_date to today (can be negative if entry is in the future)."""
         today: date = timezone.now().date()
         return (today - self.entry_date).days
+
+    @property
+    def sla_total_days(self) -> int:
+        """Total calendar days in the SLA window (due_date − entry_date). Used in UI and for alert % bands."""
+        return (self.due_date - self.entry_date).days
 
     @property
     def computed_alert_level(self) -> str:
@@ -114,10 +120,9 @@ class WasteOilRecord(models.Model):
         if self.is_locked or self.alert_level == self.AlertLevel.COMPLETED:
             return self.AlertLevel.COMPLETED
 
-        # SLA window is defined as the number of days between entry_date and due_date.
-        # We compute how much of that window has elapsed and map to alert bands.
+        # SLA window = entry_date → due_date (same as sla_total_days). Alert = % of that window elapsed.
         today: date = timezone.now().date()
-        total_days = (self.due_date - self.entry_date).days
+        total_days = self.sla_total_days
         # If due_date is not after entry_date, treat this as an immediate red SLA breach.
         if total_days <= 0:
             return self.AlertLevel.RED

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRecordStore } from "@/store/recordStore.js";
 import { useAuthStore } from "@/store/authStore.js";
-import { formatDate, formatQty, diffDays } from "@/utils/formatters.js";
+import { formatDate, formatQty, slaTotalDays } from "@/utils/formatters.js";
 import { StatusBadge } from "@/components/records/StatusBadge.jsx";
 import { formatHolderLine } from "@/utils/holderDisplay.js";
 import { CorrectionBadge } from "@/components/records/CorrectionBadge.jsx";
@@ -116,10 +116,6 @@ export function RecordList() {
 
   const exportRecordsExcel = async () => {
     const token = useAuthStore.getState().accessToken;
-    if (!token) {
-      showToast("Sign in to export.", "error");
-      return;
-    }
     setExportBusy(true);
     try {
       const base = { page_size: EXPORT_PAGE_SIZE };
@@ -150,13 +146,16 @@ export function RecordList() {
         "quantity",
         "entry_date",
         "due_date",
-        "days_elapsed",
+        "sla_total_days",
         "stage",
         "alert",
         "current_holder",
       ];
       const rows = all.map((r) => {
-        const days = r.days_elapsed != null ? r.days_elapsed : diffDays(r.entry_date);
+        const sla =
+          typeof r.sla_total_days === "number"
+            ? r.sla_total_days
+            : slaTotalDays(r.entry_date, r.due_date);
         return [
           r.record_number,
           r.vendor_name || "",
@@ -164,9 +163,9 @@ export function RecordList() {
           formatQty(r.quantity, r.unit),
           formatDate(r.entry_date),
           formatDate(r.due_date),
-          days ?? "",
+          sla ?? "",
           r.current_stage,
-          r.alert_level || "",
+          r.computed_alert_level || r.alert_level || "",
           formatHolderLine(r),
         ];
       });
@@ -189,7 +188,7 @@ export function RecordList() {
           <button type="button" className="btn btn-ghost" disabled={exportBusy} onClick={() => void exportRecordsExcel()}>
             {exportBusy ? "Exporting…" : "Export Excel"}
           </button>
-          {user?.role === "storeman" ? (
+          {user?.role === "storeman" && !user?.must_change_password ? (
             <button type="button" className="btn btn-primary" onClick={() => navigate("/records/new")}>
               New Record
             </button>
@@ -273,7 +272,9 @@ export function RecordList() {
               <th>Qty</th>
               <th>Entry</th>
               <th>Due</th>
-              <th>Days</th>
+              <th title="Total calendar days from entry to due (SLA window). Alert uses % of this window elapsed.">
+                SLA days
+              </th>
               <th>Stage</th>
               <th>Alert</th>
               <th>Current holder</th>
@@ -295,10 +296,13 @@ export function RecordList() {
               </tr>
             ) : null}
             {records.map((r) => {
-              const al = (r.alert_level || "green").toLowerCase();
+              const al = (r.computed_alert_level || r.alert_level || "green").toLowerCase();
               const rowCls =
-                al === "red" ? "row-red" : al === "yellow" ? "row-yellow" : al === "completed" ? "row-completed" : "row-green";
-              const days = r.days_elapsed != null ? r.days_elapsed : diffDays(r.entry_date);
+                al === "red" ? "row-red" : al === "orange" ? "row-orange" : al === "yellow" ? "row-yellow" : al === "completed" ? "row-completed" : "row-green";
+              const sla =
+                typeof r.sla_total_days === "number"
+                  ? r.sla_total_days
+                  : slaTotalDays(r.entry_date, r.due_date);
               return (
                 <tr
                   key={r.id}
@@ -333,10 +337,10 @@ export function RecordList() {
                   <td>{formatQty(r.quantity, r.unit)}</td>
                   <td>{formatDate(r.entry_date)}</td>
                   <td>{formatDate(r.due_date)}</td>
-                  <td>{days}</td>
+                  <td>{sla ?? "—"}</td>
                   <td>{r.current_stage}</td>
                   <td>
-                    <StatusBadge level={r.alert_level} />
+                    <StatusBadge level={r.computed_alert_level || r.alert_level} />
                   </td>
                   <td style={{ fontSize: "0.9rem", lineHeight: 1.35 }}>{formatHolderLine(r)}</td>
                 </tr>

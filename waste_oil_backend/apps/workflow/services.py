@@ -126,8 +126,13 @@ class WorkflowService:
                 request=request,
             )
 
+            # Run in-process after commit so mail is sent without a Celery worker.
+            rid_final = str(record.id)
+            from_uid = str(user.id)
             transaction.on_commit(
-                lambda: send_forwarded_notification.delay(str(record.id), None)
+                lambda: send_forwarded_notification.apply(
+                    args=(rid_final, None, from_uid)
+                )
             )
             record.refresh_from_db()
             return record
@@ -175,9 +180,11 @@ class WorkflowService:
         )
 
         nh_id = str(next_holder.id)
+        rid_fwd = str(record.id)
+        from_uid = str(user.id)
         transaction.on_commit(
-            lambda rid=str(record.id), n=nh_id: send_forwarded_notification.delay(
-                rid, n
+            lambda: send_forwarded_notification.apply(
+                args=(rid_fwd, nh_id, from_uid)
             )
         )
 
@@ -286,9 +293,12 @@ class WorkflowService:
         )
 
         ph_id = str(prev_holder.id)
+        rid_ret = str(record.id)
+        reason_copy = reason_clean
+        from_uid = str(user.id)
         transaction.on_commit(
-            lambda rid=str(record.id), p=ph_id, r=reason_clean: send_return_notification.delay(
-                rid, p, r
+            lambda: send_return_notification.apply(
+                args=(rid_ret, ph_id, reason_copy, from_uid)
             )
         )
 

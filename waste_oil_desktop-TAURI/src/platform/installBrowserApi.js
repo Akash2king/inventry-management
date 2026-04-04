@@ -2,6 +2,8 @@
  * This UI talks to `window.api`. In Tauri we keep the frontend browser-like, so
  * we install a fetch-based shim whenever a native bridge is not present.
  */
+import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
+
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
 
@@ -26,11 +28,7 @@ function buildRecordsQuery(filters = {}) {
 }
 
 function formatError(data) {
-  if (data == null) return "Request failed";
-  if (typeof data === "string") return data;
-  if (typeof data.detail === "string") return data.detail;
-  if (data.detail) return JSON.stringify(data.detail);
-  return JSON.stringify(data);
+  return humanizeApiErrorBody(data);
 }
 
 function createBrowserApi(baseUrl) {
@@ -83,6 +81,15 @@ function createBrowserApi(baseUrl) {
       }
     }
 
+    if (
+      res.status === 403 &&
+      data &&
+      typeof data === "object" &&
+      data.code === "password_change_required"
+    ) {
+      window.dispatchEvent(new CustomEvent("wom:password-change-required"));
+    }
+
     if (res.status === 401) {
       if (!skipAuth && authToken) {
         localStorage.removeItem(LS_ACCESS);
@@ -105,6 +112,73 @@ function createBrowserApi(baseUrl) {
       status: res.status,
       error: formatError(data),
       data,
+    };
+  }
+
+  /** GET binary PDF (or other non-JSON) with JWT; returns Uint8Array + filename from Content-Disposition. */
+  async function requestPdfGet(path, tokenArg) {
+    const url = `${base}/${path.replace(/^\//, "")}`;
+    const headers = {};
+    const authToken =
+      tokenArg !== undefined && tokenArg !== null && tokenArg !== ""
+        ? tokenArg
+        : localStorage.getItem(LS_ACCESS);
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+    let res;
+    try {
+      res = await fetch(url, { method: "GET", headers });
+    } catch (e) {
+      return { ok: false, status: 0, error: e.message || "Network error" };
+    }
+    if (res.status === 401) {
+      if (authToken) {
+        localStorage.removeItem(LS_ACCESS);
+        localStorage.removeItem(LS_REFRESH);
+        window.dispatchEvent(new CustomEvent("wom:auth-expired"));
+      }
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      return {
+        ok: false,
+        status: res.status,
+        error: formatError(data),
+        data,
+      };
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      return {
+        ok: false,
+        status: res.status,
+        error: formatError(data),
+        data,
+      };
+    }
+    const buf = await res.arrayBuffer();
+    const cd = res.headers.get("Content-Disposition") || "";
+    let filename = "gm_monthly_report.pdf";
+    const m = cd.match(/filename="([^"]+)"/) || cd.match(/filename=([^;\s]+)/);
+    if (m) {
+      filename = (m[1] || m[2] || filename).trim();
+    }
+    return {
+      ok: true,
+      status: res.status,
+      data: new Uint8Array(buf),
+      filename,
     };
   }
 
@@ -144,6 +218,13 @@ function createBrowserApi(baseUrl) {
         }
         return request("GET", "auth/me/", { token: t });
       },
+      changePassword: async (payload) =>
+        request("POST", "auth/change-password/", {
+          json: {
+            old_password: payload.old_password,
+            new_password: payload.new_password,
+          },
+        }),
     },
     vendors: {
       list: async (tokenArg) =>
@@ -225,6 +306,28 @@ function createBrowserApi(baseUrl) {
         request("POST", "gm/employees/", { json: data }),
       updateEmployee: async (id, data) =>
         request("PATCH", `gm/employees/${id}/`, { json: data }),
+      deleteEmployee: async (id) =>
+        request("DELETE", `gm/employees/${id}/`),
+      getMonthlyReport: async (params = {}) => {
+        const p = new URLSearchParams();
+        if (params.from) p.set("from", params.from);
+        if (params.to) p.set("to", params.to);
+        const q = p.toString();
+        const path = q
+          ? `admin-console/reports/gm/monthly/?${q}`
+          : "admin-console/reports/gm/monthly/";
+        return request("GET", path);
+      },
+      getMonthlyReportPdf: async (params = {}, tokenArg) => {
+        const p = new URLSearchParams();
+        if (params.from) p.set("from", params.from);
+        if (params.to) p.set("to", params.to);
+        const q = p.toString();
+        const path = q
+          ? `admin-console/reports/gm/monthly/pdf/?${q}`
+          : "admin-console/reports/gm/monthly/pdf/";
+        return requestPdfGet(path, tokenArg);
+      },
     },
     onAuthExpired: (callback) => {
       const fn = () => callback();

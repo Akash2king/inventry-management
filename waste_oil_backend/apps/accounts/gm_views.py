@@ -1,9 +1,11 @@
 from django.db.models import Q
 from rest_framework import generics, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.audit.models import AuditLog
+from apps.notifications.services import NotificationService
 
 from .gm_serializers import (
     GmDepartmentSerializer,
@@ -64,23 +66,23 @@ class GmEmployeeListCreateView(generics.ListCreateAPIView):
             return GmEmployeeWriteSerializer
         return GmEmployeeReadSerializer
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        plain_password = (request.data.get("password") or "").strip()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         user = serializer.save()
         AuditLog.objects.create(
-            user=self.request.user,
+            user=request.user,
             action=AuditLog.Action.CREATE,
             description=f"GM created employee account: {user.username} ({user.role}).",
         )
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        read = GmEmployeeReadSerializer(serializer.instance)
+        if plain_password and (user.email or "").strip():
+            NotificationService.send_welcome_employee_email(user, plain_password)
+        read = GmEmployeeReadSerializer(user)
         return Response(read.data, status=status.HTTP_201_CREATED)
 
 
-class GmEmployeeDetailView(generics.RetrieveUpdateAPIView):
+class GmEmployeeDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsGMOrSuperadmin]
     lookup_field = "pk"
 
@@ -101,4 +103,16 @@ class GmEmployeeDetailView(generics.RetrieveUpdateAPIView):
             user=self.request.user,
             action=AuditLog.Action.EDIT,
             description=f"GM updated employee: {user.username} ({user.role}).",
+        )
+
+    def perform_destroy(self, instance):
+        if instance.pk == self.request.user.pk:
+            raise PermissionDenied("You cannot delete your own account.")
+        username = instance.username
+        role = instance.role
+        instance.delete()
+        AuditLog.objects.create(
+            user=self.request.user,
+            action=AuditLog.Action.DELETE,
+            description=f"GM removed employee account: {username} ({role}).",
         )

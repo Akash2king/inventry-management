@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import CustomUser
 from apps.accounts.permissions import IsCurrentHolder
-from apps.records.serializers import RecordDetailSerializer
+from apps.records.serializers import RecordDetailSerializer, StageTransitionSerializer
 from apps.records.views import records_visible_to_user, workflow_queue_stage_for_user
 from apps.records.workflow_attention import (
     annotate_workflow_attention_queryset,
@@ -20,7 +20,6 @@ from apps.workflow.serializers import (
     ForwardCandidateSerializer,
     ForwardSerializer,
     ReturnSerializer,
-    StageTransitionReadSerializer,
 )
 from apps.workflow.services import WorkflowService
 
@@ -112,8 +111,13 @@ class RecordTransitionsView(APIView):
 
     def get(self, request, record_id, *args, **kwargs):
         record = _record_for_user(request.user, record_id)
-        qs = record.stage_transitions.order_by("sequence", "timestamp")
-        return Response(StageTransitionReadSerializer(qs, many=True).data)
+        qs = (
+            record.stage_transitions.select_related(
+                "transitioned_by", "from_department", "to_department"
+            )
+            .order_by("sequence", "timestamp")
+        )
+        return Response(StageTransitionSerializer(qs, many=True).data)
 
 
 class WorkflowQueueView(APIView):
@@ -152,7 +156,9 @@ class WorkflowQueueView(APIView):
                     "quantity": r.quantity,
                     "unit": r.unit,
                     "days_elapsed": r.days_elapsed,
+                    "sla_total_days": r.sla_total_days,
                     "alert_level": r.alert_level,
+                    "computed_alert_level": r.computed_alert_level,
                     "due_date": r.due_date,
                     "entry_date": r.entry_date,
                     "needs_workflow_correction": needs_fix,

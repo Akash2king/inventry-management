@@ -7,5 +7,10 @@ urlpatterns = [
     path("refresh/", views.RefreshView.as_view(), name="auth-refresh"),
     path("logout/", views.LogoutView.as_view(), name="auth-logout"),
     path("me/", views.MeView.as_view(), name="auth-me"),
+    path(
+        "change-password/",
+        views.ChangePasswordView.as_view(),
+        name="auth-change-password",
+    ),
     path("health/", views.health, name="auth-health"),
 ]

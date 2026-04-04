@@ -1,9 +1,10 @@
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 
 export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const mustChange = Boolean(user?.must_change_password);
 
   return (
     <aside className="sidebar">
@@ -20,21 +21,25 @@ export function Sidebar() {
         <NavLink to="/" end className={navClass}>
           Dashboard
         </NavLink>
-        <NavLink to="/queue" className={navClass}>
-          My Queue
-        </NavLink>
+        {!mustChange ? (
+          <NavLink to="/queue" className={navClass}>
+            My Queue
+          </NavLink>
+        ) : null}
         <NavLink to="/records" className={navClass}>
           Records
         </NavLink>
-        <NavLink to="/vendors" className={navClass}>
-          Vendors
-        </NavLink>
-        {user?.role === "storeman" ? (
+        {!mustChange ? (
+          <NavLink to="/vendors" className={navClass}>
+            Vendors
+          </NavLink>
+        ) : null}
+        {!mustChange && user?.role === "storeman" ? (
           <NavLink to="/records/new" className={navClass}>
             New Record
           </NavLink>
         ) : null}
-        {user?.role === "gm" || user?.role === "superadmin" ? (
+        {!mustChange && (user?.role === "gm" || user?.role === "superadmin") ? (
           <NavLink to="/gm" className={navClass}>
             GM console
           </NavLink>
@@ -53,6 +58,15 @@ export function Sidebar() {
         <div style={{ marginTop: 6, opacity: 0.85, fontSize: "0.82rem" }}>
           {user?.department_name || "No department"}
         </div>
+        {mustChange ? (
+          <Link
+            to="/change-password"
+            className="btn btn-primary btn-sm"
+            style={{ marginTop: "0.75rem", width: "100%", textAlign: "center", textDecoration: "none" }}
+          >
+            Change password
+          </Link>
+        ) : null}
         <button
           type="button"
           className="btn btn-ghost btn-sm"

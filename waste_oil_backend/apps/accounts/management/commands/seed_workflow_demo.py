@@ -52,10 +52,12 @@ class Command(BaseCommand):
                     "is_active": True,
                     "is_staff": False,
                     "is_superuser": False,
+                    "must_change_password": False,
                 },
             )
             user.set_password(password)
-            user.save(update_fields=["password"])
+            user.must_change_password = False
+            user.save(update_fields=["password", "must_change_password"])
             uaction = "Created" if ucreated else "Updated"
             self.stdout.write(
                 self.style.SUCCESS(

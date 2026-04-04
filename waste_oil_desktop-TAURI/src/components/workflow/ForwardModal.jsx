@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useRecordStore } from "@/store/recordStore.js";
+import { useEffect, useMemo, useState } from "react";
+import { useRecordStore, normalizeRecordPayload } from "@/store/recordStore.js";
 import { useAuthStore } from "@/store/authStore.js";
 import * as workflowApi from "@/api/workflow.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
@@ -16,8 +16,24 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
   const [candidates, setCandidates] = useState([]);
   const [selectedHolderId, setSelectedHolderId] = useState("");
   const [candidateError, setCandidateError] = useState("");
+  const [search, setSearch] = useState("");
 
   const needsAssignee = currentStage < 5;
+
+  const filteredCandidates = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter((c) => {
+      const name = (c.full_name || "").toLowerCase();
+      const username = (c.username || "").toLowerCase();
+      const dept = (c.department_name || "").toLowerCase();
+      return (
+        name.includes(q) ||
+        username.includes(q) ||
+        dept.includes(q)
+      );
+    });
+  }, [candidates, search]);
 
   useEffect(() => {
     if (!needsAssignee) {
@@ -75,7 +91,7 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
       }
       const updated = await workflowApi.forward(recordId, payload, getToken());
       if (updated?.id) {
-        useRecordStore.setState({ activeRecord: updated });
+        useRecordStore.setState({ activeRecord: normalizeRecordPayload(updated) });
       }
       showToast("Record forwarded ✓", "success");
       onClose();
@@ -116,22 +132,40 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
                   {candidateError || "No eligible users at the next stage."}
                 </p>
               ) : (
-                <select
-                  value={selectedHolderId}
-                  onChange={(e) => setSelectedHolderId(e.target.value)}
-                  required={candidates.length > 0}
-                  style={{ width: "100%", marginTop: 6 }}
-                >
-                  {candidates.length > 1 ? (
-                    <option value="">Choose a user…</option>
-                  ) : null}
-                  {candidates.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {(c.full_name || c.username).trim()} (@{c.username})
-                      {c.department_name ? ` — ${c.department_name}` : ""}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <input
+                    type="text"
+                    placeholder="Search by name, username, or department…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      width: "100%",
+                      marginTop: 6,
+                      marginBottom: 6,
+                    }}
+                  />
+                  <select
+                    value={selectedHolderId}
+                    onChange={(e) => setSelectedHolderId(e.target.value)}
+                    required={filteredCandidates.length > 0}
+                    style={{ width: "100%" }}
+                  >
+                    {filteredCandidates.length !== 1 ? (
+                      <option value="">Choose a user…</option>
+                    ) : null}
+                    {filteredCandidates.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {(c.full_name || c.username).trim()} (@{c.username})
+                        {c.department_name ? ` — ${c.department_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {filteredCandidates.length === 0 && (
+                    <p style={{ marginTop: 4, fontSize: "0.8rem", opacity: 0.75 }}>
+                      No matches for this search in the next-stage users.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           ) : null}

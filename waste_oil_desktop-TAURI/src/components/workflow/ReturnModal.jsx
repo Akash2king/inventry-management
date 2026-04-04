@@ -2,7 +2,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { useAuthStore } from "@/store/authStore.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
-import { useRecordStore } from "@/store/recordStore.js";
+import { useRecordStore, normalizeRecordPayload } from "@/store/recordStore.js";
 import * as workflowApi from "@/api/workflow.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
 
@@ -29,7 +29,7 @@ export function ReturnModal({ recordId, prevStageName, onClose }) {
       const token = useAuthStore.getState().accessToken;
       const updated = await workflowApi.returnRecord(recordId, parsed.data, token);
       if (updated?.id) {
-        useRecordStore.setState({ activeRecord: updated });
+        useRecordStore.setState({ activeRecord: normalizeRecordPayload(updated) });
       }
       showToast("Record returned ✓", "success");
       onClose();

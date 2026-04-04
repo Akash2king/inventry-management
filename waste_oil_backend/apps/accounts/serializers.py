@@ -26,6 +26,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "department_id",
             "department_name",
             "department_stage_order",
+            "must_change_password",
         )
         read_only_fields = fields
 
@@ -46,6 +47,26 @@ class WasteOilTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         data["user"] = UserProfileSerializer(self.user).data
         return data
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if not user.check_password(attrs["old_password"]):
+            raise serializers.ValidationError(
+                {"old_password": "Current password is not correct."}
+            )
+        return attrs
+
+    def save(self):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.must_change_password = False
+        user.save(update_fields=["password", "must_change_password"])
+        return user
 
 
 class WasteOilTokenRefreshSerializer(TokenRefreshSerializer):

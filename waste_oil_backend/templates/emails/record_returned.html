@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Record returned</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f5f7fb; margin: 0; padding: 24px; }
+      .wrap { max-width: 560px; margin: 0 auto; background: #fff; border-radius: 8px; border: 1px solid #fecaca; overflow: hidden; }
+      .head { padding: 16px 20px; background: linear-gradient(135deg, #b91c1c, #dc2626); color: #fff; }
+      .head h1 { margin: 0; font-size: 17px; font-weight: 600; }
+      .body { padding: 18px 20px; font-size: 14px; color: #1e293b; line-height: 1.5; }
+      .reason { margin-top: 12px; padding: 12px; background: #fef2f2; border-radius: 6px; border-left: 4px solid #dc2626; white-space: pre-wrap; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+      th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+      th { background: #fee2e2; color: #991b1b; font-weight: 600; }
+      .foot { padding: 12px 20px; font-size: 11px; color: #64748b; background: #f8fafc; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="head">
+        <h1>Waste Management — Record returned to your stage</h1>
+      </div>
+      <div class="body">
+        <p>Hello <strong>{{ recipient_name }}</strong>,</p>
+        <p>A record has been <strong>returned</strong> to your department/stage. Please open the app and address the feedback below.</p>
+        <table>
+          {% if from_user_display %}
+          <tr><th>Returned by</th><td>{{ from_user_display }}</td></tr>
+          {% endif %}
+          <tr><th>Record</th><td>{{ record.record_number }}</td></tr>
+          <tr><th>Vendor</th><td>{{ vendor_name|default:"—" }}</td></tr>
+          <tr><th>Stage</th><td>{{ record.current_stage }}</td></tr>
+          <tr><th>Department</th><td>{{ department_name|default:"—" }}</td></tr>
+        </table>
+        <p style="margin-top: 14px; font-weight: 600;">Return reason</p>
+        <div class="reason">{{ reason }}</div>
+      </div>
+      <div class="foot">Automated message from Waste Management System.</div>
+    </div>
+  </body>
+</html>

@@ -1,4 +1,5 @@
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 
 from django.db.models import Max
@@ -181,16 +182,33 @@ class WasteOilRecordAPITests(TestCase):
             self._record_payload(vendor_id=str(v_only.id)),
             format="json",
         )
+        v_other = Vendor.objects.create(name="OtherPartyRecord", contact="")
+        WasteOilRecord.objects.create(
+            record_number="WO-TEST-OTHER-1",
+            vendor=v_other,
+            product_type="General",
+            unit="kg",
+            quantity=Decimal("5.000"),
+            entry_date="2026-02-01",
+            due_date="2026-03-01",
+            created_by=self.manager,
+            current_holder=self.manager,
+            current_department=self.manager.department,
+            current_stage=4,
+            alert_level=WasteOilRecord.AlertLevel.GREEN,
+        )
         self._login(self.manager)
         mgr_list = self.client.get("/api/v1/records/")
         self.assertEqual(mgr_list.status_code, status.HTTP_200_OK)
         vendors = {r["vendor_name"] for r in mgr_list.data["results"]}
         self.assertIn("OnlyStoreman", vendors)
+        self.assertIn("OtherPartyRecord", vendors)
 
         self._login(self.storeman)
         sm_list = self.client.get("/api/v1/records/")
-        self.assertEqual(len(sm_list.data["results"]), 1)
-        self.assertEqual(sm_list.data["results"][0]["vendor_name"], "OnlyStoreman")
+        self.assertEqual(len(sm_list.data["results"]), 2)
+        sm_vendors = {r["vendor_name"] for r in sm_list.data["results"]}
+        self.assertEqual(sm_vendors, {"OnlyStoreman", "OtherPartyRecord"})
 
         rec = WasteOilRecord.objects.get(vendor__name="OnlyStoreman")
         WasteOilRecord.objects.filter(pk=rec.pk).update(current_stage=2)

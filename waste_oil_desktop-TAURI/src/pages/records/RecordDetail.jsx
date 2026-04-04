@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useRecordStore } from "@/store/recordStore.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
 import { useAuthStore } from "@/store/authStore.js";
-import { formatDate, formatQty } from "@/utils/formatters.js";
+import { formatDate, formatQty, slaTotalDays, diffDays } from "@/utils/formatters.js";
 import { StatusBadge } from "@/components/records/StatusBadge.jsx";
 import { WorkflowTimeline } from "@/components/workflow/WorkflowTimeline.jsx";
 import { ForwardModal } from "@/components/workflow/ForwardModal.jsx";
@@ -60,9 +60,10 @@ export function RecordDetail() {
     );
   }
 
-  const showFwd = canActForward(r, user);
-  const showRet = canActReturn(r, user);
-  const showEdit = canActEdit(r, user);
+  const mustChangePassword = Boolean(user?.must_change_password);
+  const showFwd = canActForward(r, user) && !mustChangePassword;
+  const showRet = canActReturn(r, user) && !mustChangePassword;
+  const showEdit = canActEdit(r, user) && !mustChangePassword;
   const holderIsViewer =
     r.viewer_is_holder !== undefined && r.viewer_is_holder !== null
       ? Boolean(r.viewer_is_holder)
@@ -71,6 +72,11 @@ export function RecordDetail() {
   const readOnlyViewer =
     !r.is_locked && !holderIsViewer && user && ["storeman", "treatment", "admin", "manager", "gm", "superadmin"].includes(user.role);
   const attachments = Array.isArray(r.attachment_paths) ? r.attachment_paths : [];
+  const slaTotal =
+    typeof r.sla_total_days === "number" ? r.sla_total_days : slaTotalDays(r.entry_date, r.due_date);
+  const daysSinceEntry =
+    typeof r.days_elapsed === "number" ? r.days_elapsed : diffDays(r.entry_date);
+  const effectiveAlert = r.computed_alert_level || r.alert_level;
   const needsCorrection = Boolean(r.needs_workflow_correction);
   const returnFeedback =
     typeof r.pending_return_feedback === "string" && r.pending_return_feedback.trim()
@@ -115,7 +121,13 @@ export function RecordDetail() {
           Actions belong to the current holder: <strong>{holderLabel}</strong>.
         </div>
       ) : null}
-      {holderIsViewer && !r.is_locked ? (
+      {mustChangePassword ? (
+        <div className="record-readonly-hint" role="status">
+          <strong>View only until you change your password.</strong> Forward, return, and edit stay disabled for
+          everyone until you complete a password update from the sidebar or sign-in flow.
+        </div>
+      ) : null}
+      {holderIsViewer && !r.is_locked && !mustChangePassword ? (
         <div className="record-holder-hint" role="status">
           You are the <strong>current holder</strong> — you can forward, return, or edit (when your stage matches).
         </div>
@@ -153,24 +165,37 @@ export function RecordDetail() {
           <Field label="Quantity" value={formatQty(r.quantity, r.unit)} />
           <Field label="Entry date" value={formatDate(r.entry_date)} />
           <Field label="Due date" value={formatDate(r.due_date)} />
+          <Field
+            label="SLA window"
+            value={
+              slaTotal != null
+                ? `${slaTotal} day${slaTotal === 1 ? "" : "s"} (entry → due)`
+                : "—"
+            }
+          />
+          <Field
+            label="Days since entry"
+            value={typeof daysSinceEntry === "number" ? String(daysSinceEntry) : "—"}
+          />
           <Field label="Stage" value={String(r.current_stage)} />
           <Field label="Current holder" value={holderLabel} />
           <Field label="Department" value={r.current_department_name || "—"} />
-          <Field label="Alert" value={<StatusBadge level={r.alert_level} />} />
+          <Field label="Alert" value={<StatusBadge level={effectiveAlert} />} />
           <Field label="Locked" value={r.is_locked ? "Yes" : "No"} />
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label>Remarks</label>
             <div>{r.remarks || "—"}</div>
           </div>
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label>Attachments</label>
-            <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
-              {attachments.length === 0 ? <li>None</li> : null}
-              {attachments.map((p) => (
-                <li key={p}>{p}</li>
-              ))}
-            </ul>
-          </div>
+          {attachments.length > 0 ? (
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>Attachments</label>
+              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+                {attachments.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </div>
 

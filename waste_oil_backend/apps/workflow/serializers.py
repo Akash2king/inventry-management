@@ -35,21 +35,3 @@ class ReturnSerializer(serializers.Serializer):
             raise serializers.ValidationError("This field may not be blank.")
         return value.strip()
 
-
-class StageTransitionReadSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StageTransition
-        fields = (
-            "id",
-            "sequence",
-            "from_stage",
-            "to_stage",
-            "from_department_id",
-            "to_department_id",
-            "transitioned_by_id",
-            "transition_type",
-            "note",
-            "timestamp",
-        )
-        read_only_fields = fields
-

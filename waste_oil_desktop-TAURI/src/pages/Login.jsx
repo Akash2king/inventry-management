@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
+import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
 import "./login.css";
 
 function IconUser() {
@@ -63,20 +64,49 @@ export function Login() {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
+  function friendlyLoginMessage(raw) {
+    const msg = String(raw || "").trim();
+    if (!msg) return "Sign in failed";
+    const lower = msg.toLowerCase();
+    if (msg.includes("401") || lower.includes("no active account") || lower.includes("invalid")) {
+      return "Invalid username or password.";
+    }
+    if (lower.includes("password") && lower.includes("blank")) {
+      return "Please enter your password.";
+    }
+    if (lower.includes("username") && lower.includes("blank")) {
+      return "Please enter your username.";
+    }
+    return msg;
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
+    const u = username.trim();
+    const p = password;
+    if (!u) {
+      setError("Please enter your username.");
+      return;
+    }
+    if (!p) {
+      setError("Please enter your password.");
+      return;
+    }
     setBusy(true);
     try {
-      await login(username, password);
+      await login(u, p);
       navigate("/", { replace: true });
     } catch (err) {
-      const msg = String(err.message || "");
-      if (msg.includes("401") || msg.toLowerCase().includes("invalid")) {
-        setError("Invalid credentials");
-      } else {
-        setError(msg || "Sign in failed");
+      let msg = String(err?.message || "");
+      if (msg.startsWith("{")) {
+        try {
+          msg = humanizeApiErrorBody(JSON.parse(msg));
+        } catch {
+          /* keep msg */
+        }
       }
+      setError(friendlyLoginMessage(msg));
     } finally {
       setBusy(false);
     }
@@ -135,9 +165,11 @@ export function Login() {
                 <IconUser />
                 <input
                   id="u"
+                  name="username"
                   autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  onInput={(e) => setUsername(e.currentTarget.value)}
                   placeholder="Your username"
                 />
               </div>
@@ -148,10 +180,12 @@ export function Login() {
                 <IconLock />
                 <input
                   id="p"
+                  name="password"
                   type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onInput={(e) => setPassword(e.currentTarget.value)}
                   placeholder="••••••••"
                 />
               </div>

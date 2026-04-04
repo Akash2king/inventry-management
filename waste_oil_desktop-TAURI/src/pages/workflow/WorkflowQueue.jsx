@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
-import { formatDate, formatQty, diffDays } from "@/utils/formatters.js";
+import { formatDate, formatQty, slaTotalDays } from "@/utils/formatters.js";
 import { StatusBadge } from "@/components/records/StatusBadge.jsx";
 import { ForwardModal } from "@/components/workflow/ForwardModal.jsx";
 import { ReturnModal } from "@/components/workflow/ReturnModal.jsx";
@@ -71,7 +71,11 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
       ) : null}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {queue.map((r) => {
-          const days = r.days_elapsed != null ? r.days_elapsed : diffDays(r.entry_date);
+          const sla =
+            typeof r.sla_total_days === "number"
+              ? r.sla_total_days
+              : slaTotalDays(r.entry_date, r.due_date);
+          const alertLevel = r.computed_alert_level || r.alert_level;
           return (
             <div key={r.id} className="card">
               <div
@@ -100,10 +104,11 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
                 ) : null}
                 <div>{r.vendor_name}</div>
                 <div style={{ fontSize: "0.9rem", marginTop: 6 }}>
-                  {formatQty(r.quantity, r.unit)} · Entry {formatDate(r.entry_date)} · {days} days
+                  {formatQty(r.quantity, r.unit)} · Entry {formatDate(r.entry_date)}
+                  {sla != null ? ` · SLA ${sla}d (entry→due)` : ""}
                 </div>
                 <div style={{ marginTop: 6 }}>
-                  <StatusBadge level={r.alert_level} />
+                  <StatusBadge level={alertLevel} />
                   <span style={{ marginLeft: 8, fontSize: "0.85rem" }}>
                     Due {formatDate(r.due_date)}
                   </span>

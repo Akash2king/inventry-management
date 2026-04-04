@@ -74,22 +74,15 @@ def records_visible_to_user(user):
     if not user.is_authenticated:
         return qs.none()
     role = user.role
+    # Storeman sees the full catalog for dashboard / browse (view-only where not holder);
+    # PATCH, forward, return, and attachments stay limited by holder / role checks on views.
     if role in (
+        CustomUser.Role.STOREMAN,
         CustomUser.Role.MANAGER,
         CustomUser.Role.GM,
         CustomUser.Role.SUPERADMIN,
     ):
         return qs
-    if role == CustomUser.Role.STOREMAN:
-        participated = StageTransition.objects.filter(
-            record_id=OuterRef("pk"),
-            transitioned_by_id=user.id,
-        )
-        return qs.filter(
-            Q(created_by=user)
-            | Q(current_holder=user)
-            | Q(Exists(participated))
-        ).distinct()
     if role in (CustomUser.Role.TREATMENT, CustomUser.Role.ADMIN):
         stage = _PIPELINE_ROLE_STAGE.get(role)
         if stage is None:

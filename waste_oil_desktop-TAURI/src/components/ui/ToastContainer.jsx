@@ -5,7 +5,7 @@ export function ToastContainer() {
   const toasts = useUiStore((s) => s.toasts);
   if (!toasts.length) return null;
   return (
-    <div className="toast-host">
+    <div className="toast-host toast-host--header" aria-live="polite" aria-atomic="true">
       {toasts.map((t) => (
         <Toast key={t.id} message={t.message} type={t.type} />
       ))}

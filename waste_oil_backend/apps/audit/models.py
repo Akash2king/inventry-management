@@ -18,6 +18,7 @@ class AuditLog(models.Model):
         LOGOUT = "LOGOUT", "Logout"
         EXPORT = "EXPORT", "Export"
         ALERT_SENT = "ALERT_SENT", "Alert sent"
+        DELETE = "DELETE", "Delete"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

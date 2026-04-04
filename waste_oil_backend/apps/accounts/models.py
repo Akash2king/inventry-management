@@ -56,6 +56,10 @@ class CustomUser(AbstractUser):
         related_name="members",
         db_column="department_id",
     )
+    must_change_password = models.BooleanField(
+        default=False,
+        help_text="If true, API access is limited until the user changes password (GM-created accounts).",
+    )
 
     class Meta:
         db_table = "users"

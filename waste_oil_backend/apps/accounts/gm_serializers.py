@@ -40,6 +40,7 @@ class GmEmployeeReadSerializer(serializers.ModelSerializer):
             "department_code",
             "department_stage_order",
             "is_active",
+            "must_change_password",
             "date_joined",
         )
         read_only_fields = fields
@@ -113,6 +114,7 @@ class GmEmployeeWriteSerializer(serializers.ModelSerializer):
         password = validated_data.pop("password")
         user = CustomUser(**validated_data)
         user.set_password(password)
+        user.must_change_password = True
         user.save()
         return user
 
@@ -124,5 +126,6 @@ class GmEmployeeWriteSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
+            instance.must_change_password = True
         instance.save()
         return instance

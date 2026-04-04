@@ -5,6 +5,8 @@ import { useRecordStore } from "@/store/recordStore.js";
 import { useWorkflowStore } from "@/store/workflowStore.js";
 import * as gmApi from "@/api/gm.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
+import { savePdfBytes } from "@/utils/pdfExport.js";
+import { downloadGmReportExcel } from "@/utils/gmReportExcelExport.js";
 
 /** Pipeline roles below GM (stages 1–4). GM / superadmin are not managed here. */
 const ROLE_OPTIONS = [
@@ -37,6 +39,9 @@ export function GmConsole() {
   const [deptFilter, setDeptFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [search, setSearch] = useState("");
+
+  const [reportFrom, setReportFrom] = useState("");
+  const [reportTo, setReportTo] = useState("");
 
   const [modal, setModal] = useState(null);
   const [userPreview, setUserPreview] = useState(null);
@@ -85,6 +90,38 @@ export function GmConsole() {
     () => employees.filter((e) => e.role === "admin").length,
     [employees]
   );
+
+  const downloadReport = async (format) => {
+    try {
+      const params = {};
+      if (reportFrom) params.from = reportFrom;
+      if (reportTo) params.to = reportTo;
+
+      if (format === "pdf") {
+        const { data: pdfBytes, filename } = await gmApi.fetchMonthlyReportPdf(
+          params,
+          getToken(),
+        );
+        await savePdfBytes(pdfBytes, filename);
+        showToast("PDF downloaded (server report — same as monthly email).", "success");
+        return;
+      }
+
+      const data = await gmApi.getMonthlyReport(params, getToken());
+
+      if (format === "excel") {
+        const filename = `gm_monthly_report_${data.period.from}_${data.period.to}.xlsx`;
+        await downloadGmReportExcel(data, filename);
+        showToast(
+          `Excel report generated for ${data.period.from} → ${data.period.to}.`,
+          "success",
+        );
+        return;
+      }
+    } catch (e) {
+      showToast(e.message || "Failed to load GM report", "error");
+    }
+  };
 
   return (
     <div>
@@ -153,6 +190,68 @@ export function GmConsole() {
         <div className="card">
           <div className="kpi-label">Users (this list)</div>
           <div className="kpi-value">{employees.length}</div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: "1rem" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+            <div className="kpi-label">GM Reports</div>
+            <p style={{ margin: "0.25rem 0 0.5rem", fontSize: "0.85rem", opacity: 0.8 }}>
+              PDF is generated on the <strong>server</strong> (same file as the monthly email attachment). Excel is built
+              in the app from the report API.
+            </p>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+            <div className="field">
+              <label>From</label>
+              <input
+                type="date"
+                value={reportFrom}
+                onChange={(e) => setReportFrom(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>To</label>
+              <input
+                type="date"
+                value={reportTo}
+                onChange={(e) => setReportTo(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setReportFrom("");
+                setReportTo("");
+              }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => downloadReport("excel")}
+            >
+              Download Excel
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => downloadReport("pdf")}
+            >
+              Download PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -294,9 +393,17 @@ export function GmConsole() {
           initialRole={modal.initialRole}
           deptByStage={modal.deptByStage}
           departments={departments}
+          currentUserId={user?.id ? String(user.id) : ""}
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null);
+            loadEmployees().catch(() => {});
+          }}
+          onDeleted={(removedId) => {
+            setModal(null);
+            setUserPreview((p) =>
+              p && String(p.id) === String(removedId) ? null : p,
+            );
             loadEmployees().catch(() => {});
           }}
         />
@@ -357,7 +464,17 @@ function UserCardModal({ row, onClose, onEdit }) {
   );
 }
 
-function EmployeeModal({ mode, row, initialRole, deptByStage, departments, onClose, onSaved }) {
+function EmployeeModal({
+  mode,
+  row,
+  initialRole,
+  deptByStage,
+  departments,
+  currentUserId,
+  onClose,
+  onSaved,
+  onDeleted,
+}) {
   const [username, setUsername] = useState(row?.username || "");
   const [email, setEmail] = useState(row?.email || "");
   const [fullName, setFullName] = useState(row?.full_name || "");
@@ -365,6 +482,17 @@ function EmployeeModal({ mode, row, initialRole, deptByStage, departments, onClo
   const [password, setPassword] = useState("");
   const [isActive, setIsActive] = useState(row?.is_active !== false);
   const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const isSelf = mode === "edit" && row?.id && currentUserId && String(row.id) === String(currentUserId);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const selectedStage = ROLE_OPTIONS.find((r) => r.value === role)?.stage ?? 1;
   const departmentId = useMemo(() => {
@@ -426,9 +554,30 @@ function EmployeeModal({ mode, row, initialRole, deptByStage, departments, onClo
     }
   }
 
+  async function removeUser() {
+    if (mode !== "edit" || !row?.id) return;
+    if (
+      !window.confirm(
+        `Permanently remove user "${row.username}"? This cannot be undone. Records they held will keep history; current holder is cleared if it was them.`,
+      )
+    ) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      await gmApi.deleteEmployee(row.id, getToken());
+      showToast("User removed", "success");
+      onDeleted(row.id);
+    } catch (err) {
+      showToast(err.message || "Remove failed", "error");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <div className="modal" role="dialog" onClick={(ev) => ev.stopPropagation()}>
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal" role="dialog" aria-modal="true">
         <h3 style={{ marginTop: 0 }}>{mode === "create" ? "New employee" : `Edit ${row.username}`}</h3>
         <form onSubmit={submit} className="grid-form">
           {mode === "create" ? (
@@ -490,13 +639,37 @@ function EmployeeModal({ mode, row, initialRole, deptByStage, departments, onClo
             />
             <label htmlFor="active">Active</label>
           </div>
-          <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </button>
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            {mode === "edit" && !isSelf ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ color: "var(--clr-danger, #b42318)" }}
+                disabled={busy || deleteBusy}
+                onClick={() => void removeUser()}
+              >
+                {deleteBusy ? "Removing…" : "Remove user"}
+              </button>
+            ) : (
+              <span />
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy || deleteBusy}>
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

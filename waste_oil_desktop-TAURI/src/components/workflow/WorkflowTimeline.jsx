@@ -8,7 +8,13 @@ function actionLabel(t) {
 }
 
 function actorName(t) {
-  if (t.transitioned_by_name) return t.transitioned_by_name;
+  const name = (t.transitioned_by_name || "").trim();
+  const un = (t.transitioned_by_username || "").trim();
+  if (name && un && name !== un) {
+    return `${name} (@${un})`;
+  }
+  if (name) return name;
+  if (un) return `@${un}`;
   if (t.transitioned_by_id) {
     return `User ${String(t.transitioned_by_id).slice(0, 8)}…`;
   }

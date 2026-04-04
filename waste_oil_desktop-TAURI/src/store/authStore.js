@@ -1,11 +1,17 @@
 import { create } from "zustand";
 
+/** Must match `LS_ACCESS` / `LS_REFRESH` in `platform/installBrowserApi.js`. */
+const LS_ACCESS = "wom_access_token";
+const LS_REFRESH = "wom_refresh_token";
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   accessToken: null,
   refreshToken: null,
   isAuthenticated: false,
   isLoading: true,
+
+  setUser: (user) => set({ user }),
 
   login: async (username, password) => {
     set({ isLoading: true });
@@ -26,6 +32,21 @@ export const useAuthStore = create((set, get) => ({
       set({ isLoading: false });
       throw e;
     }
+  },
+
+  changePassword: async (oldPassword, newPassword) => {
+    if (!window.api?.auth?.changePassword) {
+      throw new Error("API not available");
+    }
+    const res = await window.api.auth.changePassword({
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
+    if (!res.ok) {
+      throw new Error(res.error || "Could not change password");
+    }
+    set({ user: res.data });
+    return res.data;
   },
 
   logout: async () => {
@@ -60,6 +81,8 @@ export const useAuthStore = create((set, get) => ({
       if (res.ok) {
         set({
           user: res.data,
+          accessToken: localStorage.getItem(LS_ACCESS),
+          refreshToken: localStorage.getItem(LS_REFRESH),
           isAuthenticated: true,
           isLoading: false,
         });

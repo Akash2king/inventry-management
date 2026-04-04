@@ -3,6 +3,11 @@ import { create } from "zustand";
 let _id = 0;
 
 export const useUiStore = create((set, get) => ({
+  /** Increment to remount `<Outlet />` and reload the current route’s data. */
+  pageRefreshNonce: 0,
+  bumpPageRefresh: () =>
+    set((s) => ({ pageRefreshNonce: s.pageRefreshNonce + 1 })),
+
   toasts: [],
   showToast: (message, type = "success") => {
     const id = ++_id;

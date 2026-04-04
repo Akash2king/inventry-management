@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Waste Management – Monthly GM Report</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        background-color: #f5f7fb;
+        margin: 0;
+        padding: 24px;
+      }
+      .wrapper {
+        max-width: 720px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+      }
+      .header {
+        padding: 16px 24px;
+        background: linear-gradient(135deg, #1d4ed8, #0f766e);
+        color: #f9fafb;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .header p {
+        margin: 4px 0 0;
+        font-size: 13px;
+        opacity: 0.9;
+      }
+      .content {
+        padding: 20px 24px 12px;
+        font-size: 14px;
+        color: #0f172a;
+      }
+      .content h2 {
+        font-size: 15px;
+        margin: 16px 0 6px;
+      }
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+        margin: 8px 0 4px;
+      }
+      .kpi-card {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        padding: 8px 10px;
+        background-color: #f8fafc;
+      }
+      .kpi-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #64748b;
+        margin-bottom: 4px;
+      }
+      .kpi-value {
+        font-size: 18px;
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .kpi-sub {
+        font-size: 11px;
+        color: #6b7280;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 6px 0 10px;
+        font-size: 12px;
+      }
+      th,
+      td {
+        padding: 6px 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f1f5f9;
+        color: #475569;
+        font-weight: 600;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      td {
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .exceptions-note {
+        font-size: 11px;
+        color: #b91c1c;
+        margin: 4px 0 0;
+      }
+      .footer {
+        padding: 10px 24px 16px;
+        font-size: 11px;
+        color: #64748b;
+        background-color: #f8fafc;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="header">
+        <h1>Waste Management – Monthly GM Report</h1>
+        <p>
+          Period:
+          <strong>{{ report.period.from }}</strong>
+          to
+          <strong>{{ report.period.to }}</strong>
+        </p>
+      </div>
+      <div class="content">
+        <h2>Executive summary</h2>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Total records</div>
+            <div class="kpi-value">
+              {{ kpis.total_records|default:0 }}
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Completed</div>
+            <div class="kpi-value">
+              {{ kpis.completed|default:0 }}
+            </div>
+            <div class="kpi-sub">
+              {{ kpis.completion_rate|default:0 }}% completion rate
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Active</div>
+            <div class="kpi-value">
+              {{ kpis.active_records|default:0 }}
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Alert mix</div>
+            <div class="kpi-sub">
+              Green: {{ alerts.green|default:0 }} /
+              Yellow: {{ alerts.yellow|default:0 }} /
+              Orange: {{ alerts.orange|default:0 }} /
+              Red: {{ alerts.red|default:0 }}
+            </div>
+          </div>
+        </div>
+
+        <h2>Records by workflow stage</h2>
+        <table role="presentation">
+          <thead>
+            <tr>
+              <th scope="col">Stage</th>
+              <th scope="col">Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.records_by_stage %}
+            <tr>
+              <td>{{ row.current_stage }}</td>
+              <td>{{ row.count }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="2">No records in this period.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <h2>Department workload</h2>
+        <table role="presentation">
+          <thead>
+            <tr>
+              <th scope="col">Department</th>
+              <th scope="col">Active</th>
+              <th scope="col">Completed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.department_workload %}
+            <tr>
+              <td>{{ row.current_department__name|default:"Unassigned" }}</td>
+              <td>{{ row.active|default:0 }}</td>
+              <td>{{ row.completed_count|default:0 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="3">No department workload for this period.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <h2>Top vendors (by volume)</h2>
+        <table role="presentation">
+          <thead>
+            <tr>
+              <th scope="col">Vendor</th>
+              <th scope="col">Total records</th>
+              <th scope="col">Red alerts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in report.vendors|slice:":10" %}
+            <tr>
+              <td>{{ v.vendor__name|default:"—" }}</td>
+              <td>{{ v.total_records|default:0 }}</td>
+              <td>{{ v.red_count|default:0 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="3">No vendor data for this period.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <h2>Exceptions – critical / overdue records</h2>
+        <table role="presentation">
+          <thead>
+            <tr>
+              <th scope="col">Record</th>
+              <th scope="col">Vendor</th>
+              <th scope="col">Department</th>
+              <th scope="col">Stage</th>
+              <th scope="col">Alert</th>
+              <th scope="col">Days overdue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in report.exceptions %}
+            <tr>
+              <td>{{ r.record_number }}</td>
+              <td>{{ r.vendor|default:"—" }}</td>
+              <td>{{ r.department|default:"—" }}</td>
+              <td>{{ r.stage|default:"—" }}</td>
+              <td style="text-transform: uppercase">
+                {{ r.alert_level|default:"—" }}
+              </td>
+              <td>{{ r.days_overdue|default:0 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6">No critical or overdue records in this period.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="exceptions-note">
+          Note: Exceptions table is limited to a sample for email. Use the GM
+          desktop reporting tools for full-detail exports.
+        </p>
+      </div>
+      <div class="footer">
+        <p>
+          You are receiving this email because you are configured as GM or
+          Manager in the Waste Management System.
+        </p>
+        <p>This is an automated message. Please do not reply.</p>
+      </div>
+    </div>
+  </body>
+</html>
+

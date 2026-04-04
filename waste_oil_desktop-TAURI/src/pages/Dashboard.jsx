@@ -69,6 +69,7 @@ function normalizeUnit(unit) {
 export function Dashboard() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const mustChangePassword = Boolean(user?.must_change_password);
   const fetchAll = useRecordStore((s) => s.fetchAll);
   const records = useRecordStore((s) => s.records);
   const pagination = useRecordStore((s) => s.pagination);
@@ -430,10 +431,16 @@ export function Dashboard() {
         <KPICard
           variant="queue"
           label="My queue"
-          hint="Waiting for you at your stage."
+          hint={
+            mustChangePassword
+              ? "Change your password to open and work your queue."
+              : "Waiting for you at your stage."
+          }
           value={queueCount}
-          onClick={() => navigate("/queue")}
-          subtext="Not limited by the date window."
+          onClick={mustChangePassword ? undefined : () => navigate("/queue")}
+          subtext={
+            mustChangePassword ? "Available after you update your password." : "Not limited by the date window."
+          }
         />
 
         <KPICard

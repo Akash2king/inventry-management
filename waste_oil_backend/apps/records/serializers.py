@@ -36,6 +36,7 @@ class StageTransitionSerializer(serializers.ModelSerializer):
         source="to_department.name", read_only=True, allow_null=True
     )
     transitioned_by_name = serializers.SerializerMethodField()
+    transitioned_by_username = serializers.SerializerMethodField()
 
     class Meta:
         model = StageTransition
@@ -50,6 +51,7 @@ class StageTransitionSerializer(serializers.ModelSerializer):
             "to_department_name",
             "transitioned_by_id",
             "transitioned_by_name",
+            "transitioned_by_username",
             "transition_type",
             "note",
             "timestamp",
@@ -65,9 +67,14 @@ class StageTransitionSerializer(serializers.ModelSerializer):
             return name
         return getattr(u, "full_name", None) or u.username
 
+    def get_transitioned_by_username(self, obj):
+        u = obj.transitioned_by
+        return u.username if u else None
+
 
 class RecordListSerializer(serializers.ModelSerializer):
     days_elapsed = serializers.SerializerMethodField()
+    sla_total_days = serializers.SerializerMethodField()
     computed_alert_level = serializers.SerializerMethodField()
     current_department_name = serializers.CharField(
         source="current_department.name", read_only=True, allow_null=True
@@ -93,6 +100,7 @@ class RecordListSerializer(serializers.ModelSerializer):
             "entry_date",
             "due_date",
             "days_elapsed",
+            "sla_total_days",
             "alert_level",
             "computed_alert_level",
             "current_stage",
@@ -106,6 +114,9 @@ class RecordListSerializer(serializers.ModelSerializer):
 
     def get_days_elapsed(self, obj):
         return obj.days_elapsed
+
+    def get_sla_total_days(self, obj):
+        return obj.sla_total_days
 
     def get_computed_alert_level(self, obj):
         return obj.computed_alert_level
@@ -132,6 +143,7 @@ class RecordListSerializer(serializers.ModelSerializer):
 
 class RecordDetailSerializer(serializers.ModelSerializer):
     days_elapsed = serializers.SerializerMethodField()
+    sla_total_days = serializers.SerializerMethodField()
     computed_alert_level = serializers.SerializerMethodField()
     current_department_name = serializers.CharField(
         source="current_department.name", read_only=True, allow_null=True
@@ -177,6 +189,7 @@ class RecordDetailSerializer(serializers.ModelSerializer):
             "alert_level",
             "computed_alert_level",
             "days_elapsed",
+            "sla_total_days",
             "created_by_id",
             "created_at",
             "updated_at",
@@ -187,6 +200,9 @@ class RecordDetailSerializer(serializers.ModelSerializer):
 
     def get_days_elapsed(self, obj):
         return obj.days_elapsed
+
+    def get_sla_total_days(self, obj):
+        return obj.sla_total_days
 
     def get_computed_alert_level(self, obj):
         return obj.computed_alert_level
@@ -219,7 +235,12 @@ class RecordDetailSerializer(serializers.ModelSerializer):
         return _cached_correction(self, obj)[1]
 
     def get_stage_transitions(self, obj):
-        qs = obj.stage_transitions.order_by("sequence", "timestamp")
+        qs = (
+            obj.stage_transitions.select_related(
+                "transitioned_by", "from_department", "to_department"
+            )
+            .order_by("sequence", "timestamp")
+        )
         return StageTransitionSerializer(qs, many=True).data
 
     def get_recent_audit(self, obj):

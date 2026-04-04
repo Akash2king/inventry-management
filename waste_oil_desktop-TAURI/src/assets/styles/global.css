@@ -246,18 +246,32 @@ select {
   box-shadow: var(--shadow-sm);
 }
 
+.header-bar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .header-bar h1 {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--clr-text-bright);
   letter-spacing: -0.02em;
+  flex-shrink: 0;
 }
 
 .header-user {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.header-user .header-refresh {
+  flex-shrink: 0;
+  margin-right: 0.15rem;
 }
 
 .header-user__meta {
@@ -478,6 +492,18 @@ table.data-table tbody tr:hover {
   gap: 0.5rem;
 }
 
+.toast-host--header {
+  position: static;
+  z-index: auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
 .toast {
   padding: 0.65rem 1rem;
   border-radius: 8px;
@@ -496,6 +522,30 @@ table.data-table tbody tr:hover {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+@keyframes toast-in-header {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast-host--header .toast {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  max-width: min(420px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: toast-in-header 0.28s ease;
 }
 
 .toast-success {

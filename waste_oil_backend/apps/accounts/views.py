@@ -10,6 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from apps.audit.models import AuditLog
 
 from .serializers import (
+    ChangePasswordSerializer,
     UserProfileSerializer,
     WasteOilTokenObtainPairSerializer,
     WasteOilTokenRefreshSerializer,
@@ -85,6 +86,19 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        return Response(UserProfileSerializer(request.user).data)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        request.user.refresh_from_db()
         return Response(UserProfileSerializer(request.user).data)
 
 

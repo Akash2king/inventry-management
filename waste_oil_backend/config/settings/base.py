@@ -49,6 +49,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.accounts.middleware.ForcePasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -150,11 +151,19 @@ EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = True
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@example.com")
 
 MANAGER_EMAIL = os.environ.get("MANAGER_EMAIL", "")
 GM_EMAIL = os.environ.get("GM_EMAIL", "")
+
+# Shown in welcome emails for new GM-created users (e.g. how to open the desktop app).
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "").strip()
+WELCOME_EMAIL_APP_HINT = os.environ.get("WELCOME_EMAIL_APP_HINT", "").strip()
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 
@@ -164,6 +173,22 @@ CELERY_TASK_ALWAYS_EAGER = os.environ.get(
     "CELERY_TASK_ALWAYS_EAGER", ""
 ).lower() in ("1", "true", "yes")
 CELERY_TASK_EAGER_PROPAGATES = True
+
+CELERY_BEAT_SCHEDULE = {
+    # Runs once per day at 02:00 server time to evaluate SLA status
+    # for all active records and send notifications when they cross
+    # into a higher alert band (yellow / orange / red).
+    "scan-sla-alerts-daily": {
+        "task": "records.scan_sla_alerts",
+        "schedule": 60 * 60 * 24,  # every 24 hours
+    },
+    # Run once per day; the task itself only sends reports on the first of
+    # each month for the previous month's data.
+    "send-monthly-gm-report": {
+        "task": "admin_console.send_monthly_gm_report_email",
+        "schedule": 60 * 60 * 24,  # every 24 hours
+    },
+}
 
 # How many days the SLA window lasts when the storeman does not explicitly set a due_date.
 SLA_DAYS = int(os.environ.get("SLA_DAYS", "30"))

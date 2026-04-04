@@ -43,6 +43,17 @@ export function diffDays(dateStr) {
   return Math.floor((today - d) / 86400000);
 }
 
+/** Calendar days from entry date to due date (SLA window length). Matches backend `sla_total_days`. */
+export function slaTotalDays(entryStr, dueStr) {
+  if (!entryStr || !dueStr) return null;
+  const e = new Date(String(entryStr).includes("T") ? entryStr : `${entryStr}T00:00:00`);
+  const du = new Date(String(dueStr).includes("T") ? dueStr : `${dueStr}T00:00:00`);
+  if (Number.isNaN(e.getTime()) || Number.isNaN(du.getTime())) return null;
+  e.setHours(0, 0, 0, 0);
+  du.setHours(0, 0, 0, 0);
+  return Math.round((du - e) / 86400000);
+}
+
 export function truncate(str, n) {
   if (str == null) return "";
   const t = String(str);
