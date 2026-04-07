@@ -49,12 +49,6 @@ export function ChangePassword() {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
-  useEffect(() => {
-    if (!isLoading && isAuthenticated && user && !user.must_change_password) {
-      navigate("/", { replace: true });
-    }
-  }, [isAuthenticated, isLoading, user, navigate]);
-
   function parseError(err) {
     let msg = String(err?.message || "");
     if (msg.startsWith("{")) {
@@ -98,7 +92,8 @@ export function ChangePassword() {
     navigate("/login", { replace: true });
   }
 
-  const showForm = isAuthenticated && user?.must_change_password;
+  const mustChange = Boolean(user?.must_change_password);
+  const showForm = isAuthenticated && !!user;
 
   if (!showForm) {
     return (
@@ -120,10 +115,20 @@ export function ChangePassword() {
             <div className="login-card__logo" aria-hidden>
               <IconLogo />
             </div>
-            <h1 className="login-card__title">Set a new password</h1>
+            <h1 className="login-card__title">
+              {mustChange ? "Set a new password" : "Change password"}
+            </h1>
             <p className="login-card__subtitle">
-              For security, you must change your password before using the app. Signed in as{" "}
-              <strong>{user.username}</strong>.
+              {mustChange ? (
+                <>
+                  For security, you must change your password before using the rest of the app. Signed in as{" "}
+                  <strong>{user.username}</strong>.
+                </>
+              ) : (
+                <>
+                  Update your password anytime. Signed in as <strong>{user.username}</strong>.
+                </>
+              )}
             </p>
           </div>
 
@@ -139,7 +144,7 @@ export function ChangePassword() {
                   autoComplete="current-password"
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
-                  placeholder="From your welcome email"
+                  placeholder={mustChange ? "From your welcome email" : "Current password"}
                 />
               </div>
             </div>
@@ -181,6 +186,22 @@ export function ChangePassword() {
             <button type="submit" className="login-submit" disabled={busy}>
               {busy ? "Updating…" : "Update password"}
             </button>
+            {!mustChange ? (
+              <button
+                type="button"
+                className="login-submit"
+                style={{
+                  marginTop: "0.65rem",
+                  background: "transparent",
+                  color: "var(--clr-text-muted, #64748b)",
+                  border: "1px solid rgba(100, 116, 139, 0.35)",
+                  boxShadow: "none",
+                }}
+                onClick={() => navigate("/", { replace: true })}
+              >
+                Cancel
+              </button>
+            ) : null}
             <button
               type="button"
               className="login-submit"
@@ -197,7 +218,9 @@ export function ChangePassword() {
             </button>
           </form>
         </div>
-        <p className="login-page__foot">Required step for new accounts</p>
+        <p className="login-page__foot">
+          {mustChange ? "Required step for new accounts" : "Use a strong password you do not reuse elsewhere."}
+        </p>
       </div>
     </div>
   );

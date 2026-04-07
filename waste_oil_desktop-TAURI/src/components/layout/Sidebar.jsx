@@ -1,4 +1,4 @@
-import { Link, NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 
 export function Sidebar() {
@@ -58,15 +58,6 @@ export function Sidebar() {
         <div style={{ marginTop: 6, opacity: 0.85, fontSize: "0.82rem" }}>
           {user?.department_name || "No department"}
         </div>
-        {mustChange ? (
-          <Link
-            to="/change-password"
-            className="btn btn-primary btn-sm"
-            style={{ marginTop: "0.75rem", width: "100%", textAlign: "center", textDecoration: "none" }}
-          >
-            Change password
-          </Link>
-        ) : null}
         <button
           type="button"
           className="btn btn-ghost btn-sm"

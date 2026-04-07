@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 import { useUiStore } from "@/store/uiStore.js";
 import { ToastContainer } from "@/components/ui/ToastContainer.jsx";
@@ -39,6 +40,9 @@ export function Header() {
         <div className="header-user__avatar" aria-hidden>
           {initials(user)}
         </div>
+        <Link to="/change-password" className="btn btn-ghost btn-sm" title="Change your password">
+          Password
+        </Link>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => logout()}>
           Logout
         </button>
