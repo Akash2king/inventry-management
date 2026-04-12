@@ -81,6 +81,8 @@ node_modules/
 .eslintcache
 *.tsbuildinfo
 package-lock.json
+# CI / reproducible installs for the Tauri app (GitHub Actions runs npm ci)
+!waste_oil_desktop-TAURI/package-lock.json
 yarn.lock
 pnpm-lock.yaml
 npm-shrinkwrap.json
