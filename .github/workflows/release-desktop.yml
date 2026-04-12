@@ -1,4 +1,5 @@
 # Build the Tauri Windows installer (.exe via NSIS) and publish a GitHub Release.
+# Must use windows-latest: NSIS/MSVC Windows bundles are not produced on Linux runners with this project setup.
 #
 # Triggers: push to main/master (see branches below), or manual "Run workflow".
 # Requires repo Settings → Actions → General → Workflow permissions: "Read and write".
@@ -42,8 +43,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: waste_oil_desktop-TAURI/package-lock.json
+          # No npm cache: cache-dependency-path often fails on Windows ("paths were not resolved")
+          # if lockfile path resolution differs or lockfile is missing on the default branch.
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

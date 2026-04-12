@@ -250,7 +250,7 @@ Without Redis, **dev** runs tasks eagerly (no separate worker).
 
 ## GitHub Actions (Windows installer)
 
-On push to **`main`** or **`master`** (when files under `waste_oil_desktop-TAURI/` change), the workflow [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds the **NSIS Windows installer** and publishes a **GitHub Release** (tag `desktop-build-<run_number>`).
+On push to **`main`** or **`master`** (when files under `waste_oil_desktop-TAURI/` change), the workflow [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds the **NSIS Windows installer** on **`windows-latest`** and publishes a **GitHub Release** (tag `desktop-build-<run_number>`). A Linux runner cannot produce this Windows installer with the current Tauri/NSIS setup without extra cross-compilation.
 
 - **Workflow permissions:** Repository **Settings → Actions → General → Workflow permissions** must allow **Read and write** so releases can be created.
 - **API URL in the installer:** Optional repository variable **`VITE_API_BASE_URL`** (Actions → Variables). If unset, builds use `http://127.0.0.1:8000/api/v1`.
