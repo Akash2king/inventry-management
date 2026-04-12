@@ -1,0 +1,78 @@
+# Build the Tauri Windows installer (.exe via NSIS) and publish a GitHub Release.
+#
+# Triggers: push to main/master (see branches below), or manual "Run workflow".
+# Requires repo Settings → Actions → General → Workflow permissions: "Read and write".
+#
+# Optional: set Actions variable VITE_API_BASE_URL (Settings → Secrets and variables → Actions → Variables)
+# so the installer points at your API; otherwise the default below is baked in at build time.
+
+name: Release desktop (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "waste_oil_desktop-TAURI/**"
+      - ".github/workflows/release-desktop.yml"
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-tauri-windows:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: waste_oil_desktop-TAURI
+
+    env:
+      VITE_API_BASE_URL: http://127.0.0.1:8000/api/v1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: waste_oil_desktop-TAURI/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: waste_oil_desktop-TAURI/src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Optional VITE_API_BASE_URL (repository variable)
+        if: ${{ vars.VITE_API_BASE_URL != '' }}
+        shell: bash
+        run: echo "VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}" >> "$GITHUB_ENV"
+
+      - name: Build app and create GitHub Release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: waste_oil_desktop-TAURI
+          tagName: desktop-build-${{ github.run_number }}
+          releaseName: "Waste Management — Windows build ${{ github.run_number }}"
+          releaseBody: |
+            Automated build from commit [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) on `${{ github.ref_name }}`.
+
+            Download the **NSIS `.exe` installer** from the assets below. Set the repository Actions variable **`VITE_API_BASE_URL`** to bake a different API URL into the app (default is `http://127.0.0.1:8000/api/v1`).
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
