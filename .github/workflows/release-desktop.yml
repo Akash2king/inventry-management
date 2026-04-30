@@ -69,7 +69,7 @@ jobs:
         with:
           projectPath: waste_oil_desktop-TAURI
           tagName: desktop-build-${{ github.run_number }}
-          releaseName: "Waste Management — Windows build ${{ github.run_number }}"
+          releaseName: "Chem-Solv Inventory — Windows build ${{ github.run_number }}"
           releaseBody: |
             Automated build from commit [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) on `${{ github.ref_name }}`.
 

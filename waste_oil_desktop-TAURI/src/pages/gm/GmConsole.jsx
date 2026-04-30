@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 import { useRecordStore } from "@/store/recordStore.js";
@@ -8,17 +8,17 @@ import { showToast } from "@/components/ui/ToastContainer.jsx";
 import { savePdfBytes } from "@/utils/pdfExport.js";
 import { downloadGmReportExcel } from "@/utils/gmReportExcelExport.js";
 
-/** Pipeline roles below GM (stages 1–4). GM / superadmin are not managed here. */
+/** Hierarchy roles below GM. */
 const ROLE_OPTIONS = [
-  { value: "storeman", label: "Storeman", stage: 1 },
-  { value: "treatment", label: "Treatment", stage: 2 },
-  { value: "admin", label: "Admin", stage: 3 },
-  { value: "manager", label: "Manager", stage: 4 },
+  { value: "storeman", label: "Storeman", layer: "peer" },
+  { value: "treatment", label: "Treatment", layer: "peer" },
+  { value: "admin", label: "Admin", layer: "peer" },
+  { value: "manager", label: "Manager", layer: "oversight" },
 ];
 
 const ROLE_FILTER_OPTIONS = [
   { value: "", label: "All roles (hierarchy)" },
-  ...ROLE_OPTIONS.map((r) => ({ value: r.value, label: `${r.label} (stage ${r.stage})` })),
+  ...ROLE_OPTIONS.map((r) => ({ value: r.value, label: `${r.label} (${r.layer})` })),
 ];
 
 function getToken() {
@@ -43,7 +43,12 @@ export function GmConsole() {
   const [reportFrom, setReportFrom] = useState("");
   const [reportTo, setReportTo] = useState("");
 
+  const [gmTab, setGmTab] = useState("overview");
   const [modal, setModal] = useState(null);
+  const [deptModal, setDeptModal] = useState(null);
+  const [selectedDeptId, setSelectedDeptId] = useState("");
+  const [selectedDeptUsers, setSelectedDeptUsers] = useState([]);
+  const [selectedDeptUsersLoading, setSelectedDeptUsersLoading] = useState(false);
   const [userPreview, setUserPreview] = useState(null);
 
   const loadDeps = useCallback(async () => {
@@ -80,16 +85,37 @@ export function GmConsole() {
     refresh().catch(() => {});
   }, [refresh]);
 
-  const deptByStage = useMemo(() => {
+  useEffect(() => {
+    if (gmTab !== "departments" || !selectedDeptId) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setSelectedDeptUsersLoading(true);
+      try {
+        const rows = await gmApi.getEmployees({ department_id: selectedDeptId }, getToken());
+        if (!cancelled) setSelectedDeptUsers(Array.isArray(rows) ? rows : []);
+      } catch {
+        if (!cancelled) setSelectedDeptUsers([]);
+      } finally {
+        if (!cancelled) setSelectedDeptUsersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gmTab, selectedDeptId]);
+
+  const deptsByLayer = useMemo(() => {
     const m = new Map();
-    departments.forEach((d) => m.set(d.stage_order, d));
+    departments.forEach((d) => {
+      const layer = d.workflow_layer || "peer";
+      const rows = m.get(layer) || [];
+      rows.push(d);
+      m.set(layer, rows);
+    });
     return m;
   }, [departments]);
-
-  const adminCount = useMemo(
-    () => employees.filter((e) => e.role === "admin").length,
-    [employees]
-  );
 
   const downloadReport = async (format) => {
     try {
@@ -103,17 +129,20 @@ export function GmConsole() {
           getToken(),
         );
         await savePdfBytes(pdfBytes, filename);
-        showToast("PDF downloaded (server report — same as monthly email).", "success");
+        showToast(
+          "Monthly Inventory PDF downloaded (server report — same as monthly email).",
+          "success",
+        );
         return;
       }
 
       const data = await gmApi.getMonthlyReport(params, getToken());
 
       if (format === "excel") {
-        const filename = `gm_monthly_report_${data.period.from}_${data.period.to}.xlsx`;
+        const filename = `monthly_inventory_${data.period.from}_${data.period.to}.xlsx`;
         await downloadGmReportExcel(data, filename);
         showToast(
-          `Excel report generated for ${data.period.from} → ${data.period.to}.`,
+          `Monthly Inventory Excel generated for ${data.period.from} → ${data.period.to}.`,
           "success",
         );
         return;
@@ -131,10 +160,32 @@ export function GmConsole() {
       </div>
 
       <p style={{ fontSize: "0.9rem", maxWidth: 720 }}>
-        Manage users below GM in the hierarchy: Storeman → Treatment → Admin → Manager (stages 1–4). List and
-        create Admin and other pipeline logins; the department is picked automatically from the role. GM and
-        superadmin accounts are not listed or created here.
+        Manage departments and users in the workflow hierarchy. Use{" "}
+        <strong>Departments</strong> to define hierarchy clusters, then{" "}
+        <strong>Users &amp; hierarchy</strong> to allocate accounts by layer clusters. Manager and GM are oversight tier;
+        storeman/treatment/admin are peer tier. GM-created logins receive a temporary
+        password when email is configured. GM and superadmin-only accounts stay out of the employee roster.
       </p>
+
+      <div className="gm-console-tabs" role="tablist" aria-label="GM console sections">
+        {[
+          { id: "overview", label: "Overview & reports" },
+          { id: "departments", label: "Departments" },
+          { id: "users", label: "Users & hierarchy" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={gmTab === t.id}
+            aria-current={gmTab === t.id ? "true" : undefined}
+            onClick={() => setGmTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {!loading && departments.length === 0 ? (
         <p
           style={{
@@ -147,53 +198,51 @@ export function GmConsole() {
             color: "var(--clr-text)",
           }}
         >
-          No departments found. Apply backend migrations so pipeline departments (stages 1–5) are created:{" "}
+          No departments found. Apply backend migrations so hierarchy departments are created:{" "}
           <code style={{ fontSize: "0.85em" }}>python manage.py migrate</code>
         </p>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-          gap: "0.75rem",
-          marginBottom: "1.25rem",
-        }}
-      >
-        <div className="card">
-          <div className="kpi-label">Total records</div>
-          <div className="kpi-value">{pagination.count ?? 0}</div>
-        </div>
-        <button
-          type="button"
-          className="card kpi-card-btn"
-          onClick={() => navigate("/queue")}
-        >
-          <div className="kpi-label">Your queue (stage 5)</div>
-          <div className="kpi-value">{queue.length}</div>
-          <div className="kpi-hint">Open queue</div>
-        </button>
-        <div className="card">
-          <div className="kpi-label">Departments</div>
-          <div className="kpi-value">{departments.length}</div>
-        </div>
-        <button
-          type="button"
-          className="card kpi-card-btn"
-          onClick={() => setRoleFilter((r) => (r === "admin" ? "" : "admin"))}
-          title="Toggle filter: admins only"
-        >
-          <div className="kpi-label">Admins (stage 3)</div>
-          <div className="kpi-value">{adminCount}</div>
-          <div className="kpi-hint">{roleFilter === "admin" ? "Clear filter" : "Show admins"}</div>
-        </button>
-        <div className="card">
-          <div className="kpi-label">Users (this list)</div>
-          <div className="kpi-value">{employees.length}</div>
-        </div>
-      </div>
+      {gmTab === "overview" ? (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+              gap: "0.75rem",
+              marginBottom: "1.25rem",
+            }}
+          >
+            <div className="card">
+              <div className="kpi-label">Total records</div>
+              <div className="kpi-value">{pagination.count ?? 0}</div>
+            </div>
+            <button
+              type="button"
+              className="card kpi-card-btn"
+              onClick={() => navigate("/queue")}
+            >
+              <div className="kpi-label">Your queue (stage 5)</div>
+              <div className="kpi-value">{queue.length}</div>
+              <div className="kpi-hint">Open queue</div>
+            </button>
+            <div className="card">
+              <div className="kpi-label">Departments</div>
+              <div className="kpi-value">{departments.length}</div>
+            </div>
+            <button
+              type="button"
+              className="card kpi-card-btn"
+              onClick={() => navigate("/records")}
+              title="Browse records"
+            >
+              <div className="kpi-label">Open records</div>
+              <div className="kpi-value">→</div>
+              <div className="kpi-hint">List view</div>
+            </button>
+          </div>
 
-      <div className="card" style={{ marginBottom: "1rem" }}>
+          <div className="card" style={{ marginBottom: "1rem" }}>
         <div
           style={{
             display: "flex",
@@ -204,7 +253,7 @@ export function GmConsole() {
           }}
         >
           <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-            <div className="kpi-label">GM Reports</div>
+            <div className="kpi-label">Monthly Inventory Reports</div>
             <p style={{ margin: "0.25rem 0 0.5rem", fontSize: "0.85rem", opacity: 0.8 }}>
               PDF is generated on the <strong>server</strong> (same file as the monthly email attachment). Excel is built
               in the app from the report API.
@@ -254,6 +303,184 @@ export function GmConsole() {
           </div>
         </div>
       </div>
+        </>
+      ) : null}
+
+      {gmTab === "departments" ? (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div className="kpi-label">Pipeline departments</div>
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", opacity: 0.85 }}>
+                Name, code, and layer define where users sit in the hierarchy clusters.
+              </p>
+            </div>
+            <button type="button" className="btn btn-primary" onClick={() => setDeptModal({ mode: "create" })}>
+              Add department
+            </button>
+          </div>
+          <div className="table-wrap" style={{ marginTop: "1rem" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Code</th>
+                  <th>Layer</th>
+                  <th>Order</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: "1.5rem" }}>
+                      <div className="spinner" style={{ margin: "0 auto" }} />
+                    </td>
+                  </tr>
+                ) : null}
+                {!loading && departments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: "1rem" }}>
+                      No departments yet.
+                    </td>
+                  </tr>
+                ) : null}
+                {departments.map((d) => (
+                  <Fragment key={d.id}>
+                    <tr
+                      onClick={() =>
+                        setSelectedDeptId((prev) => (String(prev) === String(d.id) ? "" : String(d.id)))
+                      }
+                      style={{
+                        cursor: "pointer",
+                        background: String(d.id) === String(selectedDeptId) ? "rgba(21, 101, 192, 0.08)" : undefined,
+                      }}
+                      title="Expand/collapse users in this department"
+                    >
+                      <td>{d.name}</td>
+                      <td>{d.code}</td>
+                      <td style={{ textTransform: "capitalize" }}>{d.workflow_layer || "peer"}</td>
+                      <td>{d.stage_order}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeptModal({ mode: "edit", row: d });
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                    {String(d.id) === String(selectedDeptId) ? (
+                      <tr>
+                        <td colSpan={5} style={{ background: "rgba(21, 101, 192, 0.04)" }}>
+                          <div style={{ padding: "0.65rem 0.3rem" }}>
+                            <div className="kpi-label" style={{ marginBottom: "0.45rem" }}>
+                              Users in {d.name}
+                            </div>
+                            <div className="table-wrap">
+                              <table className="data-table">
+                                <thead>
+                                  <tr>
+                                    <th>Username</th>
+                                    <th>Name</th>
+                                    <th>Role</th>
+                                    <th>Active</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedDeptUsersLoading ? (
+                                    <tr>
+                                      <td colSpan={4} style={{ textAlign: "center", padding: "0.9rem" }}>
+                                        <div className="spinner" style={{ margin: "0 auto" }} />
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                  {!selectedDeptUsersLoading && selectedDeptUsers.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={4} style={{ textAlign: "center", padding: "0.9rem" }}>
+                                        No users in this department.
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                  {selectedDeptUsers.map((u) => (
+                                    <tr key={u.id} style={{ cursor: "pointer" }} onClick={() => setUserPreview(u)}>
+                                      <td>{u.username}</td>
+                                      <td>{u.full_name || "—"}</td>
+                                      <td style={{ textTransform: "capitalize" }}>{u.role}</td>
+                                      <td>{u.is_active ? "Yes" : "No"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {gmTab === "users" ? (
+        <>
+          <div className="gm-graph" aria-label="Users by hierarchy clusters">
+            <div className="gm-graph-cluster gm-graph-cluster--peer">
+              <h4>Peer cluster</h4>
+              <p className="gm-graph-cluster__meta">
+                Departments: {(deptsByLayer.get("peer") || []).map((d) => d.code).join(", ") || "—"}
+              </p>
+              <div className="gm-graph-nodes">
+                {employees
+                  .filter((e) => (e.department_workflow_layer || "peer") === "peer")
+                  .map((e) => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      className="gm-graph-node gm-graph-node--peer"
+                      onClick={() => setUserPreview(e)}
+                      title={`${e.full_name || e.username} (${e.role})`}
+                    >
+                      <span>{e.full_name || e.username}</span>
+                      <small>{e.role}</small>
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <div className="gm-graph-link" aria-hidden>
+              <span />
+            </div>
+            <div className="gm-graph-cluster gm-graph-cluster--oversight">
+              <h4>Oversight cluster</h4>
+              <p className="gm-graph-cluster__meta">
+                Departments: {(deptsByLayer.get("oversight") || []).map((d) => d.code).join(", ") || "—"}
+              </p>
+              <div className="gm-graph-nodes">
+                {employees
+                  .filter((e) => (e.department_workflow_layer || "peer") === "oversight")
+                  .map((e) => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      className="gm-graph-node gm-graph-node--oversight"
+                      onClick={() => setUserPreview(e)}
+                      title={`${e.full_name || e.username} (${e.role})`}
+                    >
+                      <span>{e.full_name || e.username}</span>
+                      <small>{e.role}</small>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
 
       <div className="card" style={{ marginBottom: "1rem" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
@@ -262,12 +489,12 @@ export function GmConsole() {
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
-              style={{ minWidth: 200 }}
+              style={{ minWidth: 0, width: "100%" }}
             >
               <option value="">All departments</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name} ({d.code}) — stage {d.stage_order}
+                  {d.name} ({d.code}) — {(d.workflow_layer || "peer")} / order {d.stage_order}
                 </option>
               ))}
             </select>
@@ -277,7 +504,7 @@ export function GmConsole() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              style={{ minWidth: 200 }}
+              style={{ minWidth: 0, width: "100%" }}
             >
               {ROLE_FILTER_OPTIONS.map((o) => (
                 <option key={o.value || "all"} value={o.value}>
@@ -286,7 +513,7 @@ export function GmConsole() {
               ))}
             </select>
           </div>
-          <div className="field" style={{ flex: "1 1 200px" }}>
+          <div className="field" style={{ flex: "1 1 12rem", minWidth: 0 }}>
             <label>Search</label>
             <input
               placeholder="Username, email, name…"
@@ -300,14 +527,14 @@ export function GmConsole() {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => setModal({ mode: "create", deptByStage, initialRole: "admin" })}
+            onClick={() => setModal({ mode: "create", deptsByLayer, initialRole: "admin" })}
           >
             Add admin
           </button>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => setModal({ mode: "create", deptByStage })}
+            onClick={() => setModal({ mode: "create", deptsByLayer })}
           >
             Add user
           </button>
@@ -323,7 +550,7 @@ export function GmConsole() {
               <th>Name</th>
               <th>Role</th>
               <th>Department</th>
-              <th>Stage</th>
+              <th>Layer</th>
               <th>Active</th>
               <th />
             </tr>
@@ -355,14 +582,14 @@ export function GmConsole() {
                 <td>{row.full_name || "—"}</td>
                 <td style={{ textTransform: "capitalize" }}>{row.role}</td>
                 <td>{row.department_name || "—"}</td>
-                <td>{row.department_stage_order ?? "—"}</td>
+                <td style={{ textTransform: "capitalize" }}>{row.department_workflow_layer || "—"}</td>
                 <td>{row.is_active ? "Yes" : "No"}</td>
                 <td onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
-                    onClick={() => setModal({ mode: "edit", row, deptByStage })}
+                    onClick={() => setModal({ mode: "edit", row, deptsByLayer })}
                   >
                     Edit
                   </button>
@@ -372,6 +599,8 @@ export function GmConsole() {
           </tbody>
         </table>
       </div>
+        </>
+      ) : null}
 
       {userPreview ? (
         <UserCardModal
@@ -380,7 +609,7 @@ export function GmConsole() {
           onEdit={() => {
             const row = userPreview;
             setUserPreview(null);
-            setModal({ mode: "edit", row, deptByStage });
+            setModal({ mode: "edit", row, deptsByLayer });
           }}
         />
       ) : null}
@@ -391,7 +620,7 @@ export function GmConsole() {
           mode={modal.mode}
           row={modal.row}
           initialRole={modal.initialRole}
-          deptByStage={modal.deptByStage}
+          deptsByLayer={modal.deptsByLayer}
           departments={departments}
           currentUserId={user?.id ? String(user.id) : ""}
           onClose={() => setModal(null)}
@@ -405,6 +634,20 @@ export function GmConsole() {
               p && String(p.id) === String(removedId) ? null : p,
             );
             loadEmployees().catch(() => {});
+          }}
+        />
+      ) : null}
+
+      {deptModal ? (
+        <DepartmentModal
+          key={`${deptModal.mode}-${deptModal.row?.id ?? "new"}`}
+          mode={deptModal.mode}
+          row={deptModal.row}
+          viewerRole={user?.role}
+          onClose={() => setDeptModal(null)}
+          onSaved={() => {
+            setDeptModal(null);
+            Promise.all([loadDeps(), loadEmployees()]).catch(() => {});
           }}
         />
       ) : null}
@@ -443,8 +686,8 @@ function UserCardModal({ row, onClose, onEdit }) {
             <dd style={{ margin: 0 }}>{row.department_name || "—"}</dd>
           </div>
           <div>
-            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Stage</dt>
-            <dd style={{ margin: 0 }}>{row.department_stage_order ?? "—"}</dd>
+            <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Layer</dt>
+            <dd style={{ margin: 0, textTransform: "capitalize" }}>{row.department_workflow_layer || "—"}</dd>
           </div>
           <div>
             <dt style={{ fontSize: "0.72rem", textTransform: "uppercase", opacity: 0.65, marginBottom: 2 }}>Active</dt>
@@ -468,7 +711,7 @@ function EmployeeModal({
   mode,
   row,
   initialRole,
-  deptByStage,
+  deptsByLayer,
   departments,
   currentUserId,
   onClose,
@@ -494,12 +737,13 @@ function EmployeeModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const selectedStage = ROLE_OPTIONS.find((r) => r.value === role)?.stage ?? 1;
+  const selectedLayer = ROLE_OPTIONS.find((r) => r.value === role)?.layer ?? "peer";
   const departmentId = useMemo(() => {
-    const map = deptByStage instanceof Map ? deptByStage : null;
-    const d = map?.get(selectedStage);
+    const map = deptsByLayer instanceof Map ? deptsByLayer : null;
+    const rows = map?.get(selectedLayer) || [];
+    const d = rows[0];
     return d ? String(d.id) : "";
-  }, [deptByStage, selectedStage]);
+  }, [deptsByLayer, selectedLayer]);
 
   async function submit(e) {
     e.preventDefault();
@@ -539,9 +783,9 @@ function EmployeeModal({
         if (password.length >= 8) {
           payload.password = password;
         }
-        const stage = ROLE_OPTIONS.find((r) => r.value === role)?.stage ?? 1;
-        const d =
-          deptByStage instanceof Map ? deptByStage.get(stage) : undefined;
+        const layer = ROLE_OPTIONS.find((r) => r.value === role)?.layer ?? "peer";
+        const rows = deptsByLayer instanceof Map ? deptsByLayer.get(layer) || [] : [];
+        const d = rows[0];
         if (d) payload.department = String(d.id);
         await gmApi.updateEmployee(row.id, payload, getToken());
         showToast("Employee updated", "success");
@@ -604,7 +848,7 @@ function EmployeeModal({
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
-                  {o.label} (stage {o.stage})
+                  {o.label} ({o.layer})
                 </option>
               ))}
             </select>
@@ -658,6 +902,158 @@ function EmployeeModal({
                 onClick={() => void removeUser()}
               >
                 {deleteBusy ? "Removing…" : "Remove user"}
+              </button>
+            ) : (
+              <span />
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy || deleteBusy}>
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DepartmentModal({ mode, row, viewerRole, onClose, onSaved }) {
+  const maxOrder = viewerRole === "gm" ? 4 : 99;
+  const [name, setName] = useState(mode === "edit" ? row?.name ?? "" : "");
+  const [code, setCode] = useState(mode === "edit" ? row?.code ?? "" : "");
+  const [stageOrder, setStageOrder] = useState(mode === "edit" ? row?.stage_order ?? 1 : 1);
+  const [workflowLayer, setWorkflowLayer] = useState(
+    mode === "edit" ? row?.workflow_layer ?? "peer" : "peer"
+  );
+  const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit(e) {
+    e.preventDefault();
+    const st = Number(stageOrder);
+    if (Number.isNaN(st) || st < 1) {
+      showToast("Stage order must be at least 1.", "error");
+      return;
+    }
+    if (st > maxOrder) {
+      showToast(`GM may only assign order values 1–${maxOrder}.`, "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      const payload = {
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        stage_order: st,
+        workflow_layer: workflowLayer,
+      };
+      if (!payload.name || !payload.code) {
+        showToast("Name and code are required.", "error");
+        setBusy(false);
+        return;
+      }
+      if (mode === "create") {
+        await gmApi.createDepartment(payload, getToken());
+        showToast("Department created", "success");
+      } else {
+        await gmApi.updateDepartment(row.id, payload, getToken());
+        showToast("Department updated", "success");
+      }
+      onSaved();
+    } catch (err) {
+      showToast(err.message || "Save failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeDept() {
+    if (mode !== "edit" || !row?.id) return;
+    if (!window.confirm(`Delete department "${row.name}"? Users or history may block this.`)) return;
+    setDeleteBusy(true);
+    try {
+      await gmApi.deleteDepartment(row.id, getToken());
+      showToast("Department removed", "success");
+      onSaved();
+    } catch (err) {
+      showToast(err.message || "Delete failed", "error");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal" role="dialog" aria-modal="true">
+        <h3 style={{ marginTop: 0 }}>
+          {mode === "create" ? "New department" : `Edit ${row?.name || "department"}`}
+        </h3>
+        <form onSubmit={submit} className="grid-form">
+          <div className="field">
+            <label>Name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} />
+          </div>
+          <div className="field">
+            <label>Code</label>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+              maxLength={10}
+              style={{ textTransform: "uppercase" }}
+            />
+          </div>
+          <div className="field">
+            <label>Hierarchy layer</label>
+            <select value={workflowLayer} onChange={(e) => setWorkflowLayer(e.target.value)}>
+              <option value="peer">Peer cluster (storeman/treatment/admin)</option>
+              <option value="oversight">Oversight cluster (manager/gm)</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Order within layer</label>
+            <input
+              type="number"
+              min={1}
+              max={maxOrder}
+              value={stageOrder}
+              onChange={(e) => setStageOrder(e.target.value)}
+            />
+            <p style={{ margin: "0.35rem 0 0", fontSize: "0.78rem", opacity: 0.75 }}>
+              {viewerRole === "gm" ? `GM accounts: order range 1–${maxOrder}.` : "Superadmin may use any order value."}
+            </p>
+          </div>
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            {mode === "edit" ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ color: "var(--clr-danger, #b42318)" }}
+                disabled={busy || deleteBusy}
+                onClick={() => void removeDept()}
+              >
+                {deleteBusy ? "Removing…" : "Delete department"}
               </button>
             ) : (
               <span />

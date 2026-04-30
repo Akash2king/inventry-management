@@ -1,5 +1,9 @@
+import mimetypes
+
+from django.core.files.storage import default_storage
 from django.db.models import Exists, OuterRef, Q
 from django.db.models.deletion import ProtectedError
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -23,11 +27,12 @@ from apps.accounts.permissions import (
 )
 from apps.workflow.models import StageTransition
 
-from .models import Vendor, WasteOilRecord
+from .models import RecordOption, Vendor, WasteOilRecord
 from .serializers import (
     RecordCreateSerializer,
     RecordDetailSerializer,
     RecordListSerializer,
+    RecordOptionSerializer,
     RecordUpdateSerializer,
     VendorSerializer,
 )
@@ -74,29 +79,21 @@ def records_visible_to_user(user):
     if not user.is_authenticated:
         return qs.none()
     role = user.role
-    # Storeman sees the full catalog for dashboard / browse (view-only where not holder);
-    # PATCH, forward, return, and attachments stay limited by holder / role checks on views.
-    if role in (
-        CustomUser.Role.STOREMAN,
-        CustomUser.Role.MANAGER,
-        CustomUser.Role.GM,
-        CustomUser.Role.SUPERADMIN,
-    ):
+    if role in (CustomUser.Role.MANAGER, CustomUser.Role.GM, CustomUser.Role.SUPERADMIN):
         return qs
-    if role in (CustomUser.Role.TREATMENT, CustomUser.Role.ADMIN):
-        stage = _PIPELINE_ROLE_STAGE.get(role)
-        if stage is None:
-            return qs.none()
-        # Inbox + current assignment + anything you already forwarded/returned (read-only).
+    # Below manager level, users can only see records they currently hold
+    # or records they have already forwarded themselves.
+    if role in (CustomUser.Role.STOREMAN, CustomUser.Role.TREATMENT, CustomUser.Role.ADMIN):
         participated = StageTransition.objects.filter(
             record_id=OuterRef("pk"),
             transitioned_by_id=user.id,
+            transition_type=StageTransition.TransitionType.FORWARD,
         )
-        return qs.filter(
-            Q(current_stage=stage)
-            | Q(current_holder=user)
-            | Q(Exists(participated))
-        ).distinct()
+        return (
+            qs.filter(Q(current_holder=user) | Q(Exists(participated)))
+            .exclude(alert_level=WasteOilRecord.AlertLevel.COMPLETED)
+            .distinct()
+        )
     return qs.none()
 
 
@@ -263,6 +260,90 @@ class WasteOilRecordAttachmentView(APIView):
             record, upload, request.user, request=request
         )
         return Response({"path": path}, status=status.HTTP_201_CREATED)
+
+
+class WasteOilRecordPhotoView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+    max_photo_bytes = 200 * 1024
+
+    def get_permissions(self):
+        if self.request.method == "OPTIONS":
+            return [AllowAny()]
+        if self.request.method in ("GET", "HEAD"):
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsCurrentHolder()]
+
+    def get(self, request, pk, *args, **kwargs):
+        """Serve entry photo with JWT (browser <img> cannot send Authorization to /media/)."""
+        record = get_object_or_404(records_visible_to_user(request.user), pk=pk)
+        if not record.photo_path:
+            return Response(
+                {"detail": "No photo for this record."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rel = str(record.photo_path).replace("\\", "/").lstrip("/")
+        if not default_storage.exists(rel):
+            return Response(
+                {"detail": "Photo file missing."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        content_type = (
+            mimetypes.guess_type(rel)[0] or "application/octet-stream"
+        )
+        fh = default_storage.open(rel, "rb")
+        return FileResponse(fh, content_type=content_type)
+
+    def post(self, request, pk, *args, **kwargs):
+        record = get_object_or_404(records_visible_to_user(request.user), pk=pk)
+        self.check_object_permissions(request, record)
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response(
+                {"detail": "Multipart file field 'file' is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if upload.size > self.max_photo_bytes:
+            return Response(
+                {"detail": "Photo must be 200KB or smaller."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        content_type = (getattr(upload, "content_type", "") or "").lower()
+        if not content_type.startswith("image/"):
+            return Response(
+                {"detail": "Only image files are allowed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        path = RecordService.save_photo(record, upload, request.user, request=request)
+        return Response({"path": path}, status=status.HTTP_201_CREATED)
+
+
+class RecordOptionListCreateView(ListCreateAPIView):
+    serializer_class = RecordOptionSerializer
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsStoremanGmOrSuperadmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = RecordOption.objects.all()
+        if category := self.request.query_params.get("category"):
+            qs = qs.filter(category=category)
+        return qs.order_by("category", "value", "id")
+
+
+class RecordOptionDetailView(RetrieveUpdateDestroyAPIView):
+    serializer_class = RecordOptionSerializer
+    lookup_field = "pk"
+
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT", "DELETE"):
+            return [IsAuthenticated(), IsStoremanGmOrSuperadmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        return RecordOption.objects.all()
 
 
 @api_view(["GET"])

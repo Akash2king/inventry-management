@@ -142,9 +142,12 @@ class RecordService:
             product_description=validated_data.get("product_description") or "",
             product_type=validated_data["product_type"],
             unit=validated_data["unit"],
+            packaging=validated_data.get("packaging") or "",
             quantity=validated_data["quantity"],
             entry_date=entry_date,
             due_date=due_date,
+            driver_name=validated_data.get("driver_name") or "",
+            vehicle_details=validated_data.get("vehicle_details") or "",
             remarks=validated_data.get("remarks") or "",
             current_stage=1,
             current_holder=user,
@@ -168,9 +171,13 @@ class RecordService:
             "product_description": record.product_description,
             "product_type": record.product_type,
             "unit": record.unit,
+            "packaging": record.packaging,
             "quantity": str(record.quantity),
             "entry_date": record.entry_date.isoformat(),
             "due_date": record.due_date.isoformat(),
+            "driver_name": record.driver_name,
+            "vehicle_details": record.vehicle_details,
+            "photo_path": record.photo_path,
             "remarks": record.remarks,
             "attachment_paths": list(record.attachment_paths or []),
         }
@@ -196,9 +203,12 @@ class RecordService:
             "product_description",
             "product_type",
             "unit",
+            "packaging",
             "quantity",
             "entry_date",
             "due_date",
+            "driver_name",
+            "vehicle_details",
             "remarks",
         ):
             if field not in validated_data:
@@ -273,6 +283,28 @@ class RecordService:
             record,
             description=f"Attachment added: {saved_path}",
             new_data={"attachment_added": saved_path},
+            request=request,
+        )
+        return saved_path
+
+    @staticmethod
+    def save_photo(record: WasteOilRecord, uploaded_file, user, request=None) -> str:
+        if record.is_locked:
+            raise PermissionDenied(
+                "Record is locked. No further edits permitted."
+            )
+        safe_name = os.path.basename(uploaded_file.name)
+        subdir = f"records/{record.pk}/photos"
+        path = f"{subdir}/{uuid.uuid4().hex}_{safe_name}"
+        saved_path = default_storage.save(path, uploaded_file)
+        record.photo_path = saved_path
+        record.save(update_fields=["photo_path", "updated_at"])
+        AuditService.log(
+            user,
+            AuditLog.Action.EDIT,
+            record,
+            description=f"Photo uploaded: {saved_path}",
+            new_data={"photo_path": saved_path},
             request=request,
         )
         return saved_path

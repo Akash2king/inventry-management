@@ -2,18 +2,59 @@ from rest_framework import serializers
 
 from apps.accounts.models import CustomUser, Department
 
-ROLE_STAGE = {
-    CustomUser.Role.STOREMAN: 1,
-    CustomUser.Role.TREATMENT: 2,
-    CustomUser.Role.ADMIN: 3,
-    CustomUser.Role.MANAGER: 4,
+ROLE_LAYER = {
+    CustomUser.Role.STOREMAN: Department.WorkflowLayer.PEER,
+    CustomUser.Role.TREATMENT: Department.WorkflowLayer.PEER,
+    CustomUser.Role.ADMIN: Department.WorkflowLayer.PEER,
+    CustomUser.Role.MANAGER: Department.WorkflowLayer.OVERSIGHT,
 }
 
 
 class GmDepartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
-        fields = ("id", "name", "code", "stage_order")
+        fields = ("id", "name", "code", "stage_order", "workflow_layer")
+
+
+class GmDepartmentWriteSerializer(serializers.ModelSerializer):
+    """Create/update pipeline departments."""
+
+    class Meta:
+        model = Department
+        fields = ("name", "code", "stage_order", "workflow_layer")
+        extra_kwargs = {
+            "workflow_layer": {"required": False},
+        }
+
+    def validate_stage_order(self, value):
+        if value is not None and value < 1:
+            raise serializers.ValidationError("Stage order must be at least 1.")
+        return value
+
+    def validate_workflow_layer(self, value):
+        if value not in (
+            Department.WorkflowLayer.PEER,
+            Department.WorkflowLayer.OVERSIGHT,
+        ):
+            raise serializers.ValidationError("Invalid workflow layer.")
+        return value
+
+    def validate_code(self, value):
+        code = (value or "").strip().upper()
+        if len(code) < 2:
+            raise serializers.ValidationError("Code must be at least 2 characters.")
+        return code[:10]
+
+    def validate_name(self, value):
+        name = (value or "").strip()
+        if len(name) < 2:
+            raise serializers.ValidationError("Name must be at least 2 characters.")
+        return name[:100]
+
+    def update(self, instance, validated_data):
+        # Keep role-stage alignment checks for assigned users unchanged here;
+        # changing stage_order might break existing memberships — callers should reconcile.
+        return super().update(instance, validated_data)
 
 
 class GmEmployeeReadSerializer(serializers.ModelSerializer):
@@ -25,6 +66,9 @@ class GmEmployeeReadSerializer(serializers.ModelSerializer):
     )
     department_stage_order = serializers.IntegerField(
         source="department.stage_order", read_only=True, allow_null=True
+    )
+    department_workflow_layer = serializers.CharField(
+        source="department.workflow_layer", read_only=True, allow_null=True
     )
 
     class Meta:
@@ -39,6 +83,7 @@ class GmEmployeeReadSerializer(serializers.ModelSerializer):
             "department_name",
             "department_code",
             "department_stage_order",
+            "department_workflow_layer",
             "is_active",
             "must_change_password",
             "date_joined",
@@ -84,7 +129,7 @@ class GmEmployeeWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "GM and Superadmin accounts cannot be created from this console."
             )
-        if value not in ROLE_STAGE:
+        if value not in ROLE_LAYER:
             raise serializers.ValidationError("Invalid role for pipeline employee.")
         return value
 
@@ -98,13 +143,13 @@ class GmEmployeeWriteSerializer(serializers.ModelSerializer):
         role = attrs.get("role", getattr(instance, "role", None) if instance else None)
         dept = attrs.get("department", getattr(instance, "department", None) if instance else None)
         if role and dept:
-            expected = ROLE_STAGE.get(role)
-            if expected is not None and dept.stage_order != expected:
+            expected_layer = ROLE_LAYER.get(role)
+            if expected_layer is not None and dept.workflow_layer != expected_layer:
                 raise serializers.ValidationError(
                     {
                         "department": (
-                            f"Department '{dept.code}' is stage {dept.stage_order}; "
-                            f"role '{role}' must use a department at stage {expected}."
+                            f"Department '{dept.code}' is layer '{dept.workflow_layer}'; "
+                            f"role '{role}' must use a department in layer '{expected_layer}'."
                         )
                     }
                 )

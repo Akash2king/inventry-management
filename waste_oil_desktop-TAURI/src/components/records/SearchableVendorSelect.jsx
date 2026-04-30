@@ -20,11 +20,7 @@ export function SearchableVendorSelect({
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return vendors;
-    return vendors.filter((v) => {
-      const name = (v.name || "").toLowerCase();
-      const contact = (v.contact || "").toLowerCase();
-      return name.includes(t) || contact.includes(t);
-    });
+    return vendors.filter((v) => (v.name || "").toLowerCase().includes(t));
   }, [vendors, q]);
 
   useEffect(() => {
@@ -51,9 +47,7 @@ export function SearchableVendorSelect({
         onClick={() => !disabled && vendors.length > 0 && setOpen((o) => !o)}
       >
         <span className="searchable-select__trigger-text">
-          {selected
-            ? `${selected.name}${selected.contact ? ` · ${selected.contact}` : ""}`
-            : "— Search or select vendor —"}
+          {selected ? selected.name : "— Search or select vendor —"}
         </span>
         <span className="searchable-select__chev" aria-hidden>
           ▾
@@ -86,9 +80,6 @@ export function SearchableVendorSelect({
                   }}
                 >
                   <span className="searchable-select__opt-name">{v.name}</span>
-                  {v.contact ? (
-                    <span className="searchable-select__opt-meta">{v.contact}</span>
-                  ) : null}
                 </button>
               ))
             )}

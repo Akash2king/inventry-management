@@ -1,16 +1,22 @@
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { SearchableVendorSelect } from "@/components/records/SearchableVendorSelect.jsx";
+import { SearchableOptionManager } from "@/components/records/SearchableOptionManager.jsx";
 
 const schema = z.object({
   vendor_id: z.string().uuid("Select a vendor"),
   product_description: z.union([z.string(), z.literal("")]).optional(),
   product_type: z.string().min(1, "Required"),
   unit: z.string().min(1, "Required"),
+  packaging: z.union([z.string(), z.literal("")]).optional(),
   quantity: z.coerce.number().positive("Must be positive"),
   entry_date: z.string().min(1, "Required"),
   due_date: z.union([z.string(), z.literal("")]).optional(),
+  driver_name: z.union([z.string(), z.literal("")]).optional(),
+  vehicle_details: z.union([z.string(), z.literal("")]).optional(),
+  photo_file: z.any().optional(),
   remarks: z.union([z.string(), z.literal("")]).optional(),
 });
 
@@ -21,11 +27,18 @@ export function RecordForm({
   onCancel,
   submitLabel = "Save",
   isSubmitting = false,
+  optionSets = {},
+  onCreateOption,
+  onDeleteOption,
+  optionManageEnabled = false,
 }) {
+  const [photoAck, setPhotoAck] = useState("");
+
   const {
     register,
     control,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
@@ -34,9 +47,13 @@ export function RecordForm({
       product_description: "",
       product_type: "",
       unit: "",
+      packaging: "",
       quantity: "",
       entry_date: "",
       due_date: "",
+      driver_name: "",
+      vehicle_details: "",
+      photo_file: null,
       remarks: "",
     },
   });
@@ -77,15 +94,69 @@ export function RecordForm({
       </div>
       <div className="field">
         <label htmlFor="product_type">Product type</label>
-        <input id="product_type" {...register("product_type")} placeholder="e.g. scrap, chemical, consumable" />
+        <Controller
+          name="product_type"
+          control={control}
+          render={({ field }) => (
+            <SearchableOptionManager
+              id="product_type"
+              value={field.value}
+              onChange={field.onChange}
+              options={optionSets.product_type || []}
+              placeholder="Select product type"
+              searchPlaceholder="Search product type..."
+              allowManage={optionManageEnabled}
+              onAddOption={(v) => onCreateOption?.("product_type", v)}
+              onDeleteOption={(o) => onDeleteOption?.("product_type", o)}
+              error={Boolean(errors.product_type)}
+            />
+          )}
+        />
         {errors.product_type ? (
           <div className="field-error">{errors.product_type.message}</div>
         ) : null}
       </div>
       <div className="field">
         <label htmlFor="unit">Unit</label>
-        <input id="unit" {...register("unit")} placeholder="kg, L, pcs…" />
+        <Controller
+          name="unit"
+          control={control}
+          render={({ field }) => (
+            <SearchableOptionManager
+              id="unit"
+              value={field.value}
+              onChange={field.onChange}
+              options={optionSets.unit || []}
+              placeholder="Select unit"
+              searchPlaceholder="Search unit..."
+              allowManage={optionManageEnabled}
+              onAddOption={(v) => onCreateOption?.("unit", v)}
+              onDeleteOption={(o) => onDeleteOption?.("unit", o)}
+              error={Boolean(errors.unit)}
+            />
+          )}
+        />
         {errors.unit ? <div className="field-error">{errors.unit.message}</div> : null}
+      </div>
+      <div className="field">
+        <label htmlFor="packaging">Packaging</label>
+        <Controller
+          name="packaging"
+          control={control}
+          render={({ field }) => (
+            <SearchableOptionManager
+              id="packaging"
+              value={field.value}
+              onChange={field.onChange}
+              options={optionSets.packaging || []}
+              placeholder="Select packaging"
+              searchPlaceholder="Search packaging..."
+              allowManage={optionManageEnabled}
+              onAddOption={(v) => onCreateOption?.("packaging", v)}
+              onDeleteOption={(o) => onDeleteOption?.("packaging", o)}
+            />
+          )}
+        />
       </div>
       <div className="field">
         <label htmlFor="quantity">Quantity</label>
@@ -114,6 +185,63 @@ export function RecordForm({
         </span>
         {errors.due_date ? (
           <div className="field-error">{errors.due_date.message}</div>
+        ) : null}
+      </div>
+      <div className="field">
+        <label htmlFor="driver_name">Driver name</label>
+        <Controller
+          name="driver_name"
+          control={control}
+          render={({ field }) => (
+            <SearchableOptionManager
+              id="driver_name"
+              value={field.value}
+              onChange={field.onChange}
+              options={optionSets.driver_name || []}
+              placeholder="Choose driver"
+              searchPlaceholder="Search driver..."
+              allowManage={optionManageEnabled}
+              onAddOption={(v) => onCreateOption?.("driver_name", v)}
+              onDeleteOption={(o) => onDeleteOption?.("driver_name", o)}
+            />
+          )}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="vehicle_details">Vehicle details</label>
+        <input id="vehicle_details" {...register("vehicle_details")} placeholder="Vehicle number/type" />
+      </div>
+      <div className="field" style={{ gridColumn: "1 / -1" }}>
+        <label htmlFor="photo_file">Entry photo (max 200KB)</label>
+        <input
+          id="photo_file"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0] || null;
+            if (!f) {
+              setPhotoAck("");
+              setValue("photo_file", null, { shouldValidate: true });
+              return;
+            }
+            if (f.size > 200 * 1024) {
+              e.target.value = "";
+              setPhotoAck("Image is too large. Please upload 200KB or less.");
+              setValue("photo_file", null, { shouldValidate: true });
+              return;
+            }
+            setValue("photo_file", f, { shouldValidate: true });
+            const kb = Math.max(1, Math.round(f.size / 1024));
+            setPhotoAck(`Image selected: ${f.name} (${kb}KB)`);
+          }}
+        />
+        <span style={{ fontSize: "0.8rem", opacity: 0.8, display: "block", marginTop: 4 }}>
+          Only image files, 200KB or less.
+        </span>
+        {photoAck ? (
+          <div className="field-error" style={{ color: photoAck.includes("too large") ? "#c62828" : "#2e7d32" }}>
+            {photoAck}
+          </div>
         ) : null}
       </div>
       <div className="field" style={{ gridColumn: "1 / -1" }}>

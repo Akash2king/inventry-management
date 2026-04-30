@@ -25,6 +25,9 @@ function normalizeRow(row) {
 function addSheet(workbook, title, headers, rows) {
   const data = [headers.map(normalizeCell), ...rows.map(normalizeRow)];
   const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = headers.map((header) => ({
+    wch: Math.max(14, String(header || "").length + 4),
+  }));
   XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(title));
 }
 
@@ -41,15 +44,17 @@ function addSheet(workbook, title, headers, rows) {
 export async function downloadGmReportExcel(report, filename) {
   const wb = XLSX.utils.book_new();
   const period = report?.period || {};
+  const reportTitle = report?.report_title || "Monthly Inventory Report";
   const k = report?.kpis || {};
   const alerts = k.alerts || {};
 
   // Summary sheet
   addSheet(
     wb,
-    "Summary",
+    "Monthly Inventory",
     ["Metric", "Value"],
     [
+      ["Report title", reportTitle],
       ["Period from", period.from || ""],
       ["Period to", period.to || ""],
       ["Total records", k.total_records ?? 0],
@@ -60,6 +65,10 @@ export async function downloadGmReportExcel(report, filename) {
       ["Alerts – Yellow", alerts.yellow ?? 0],
       ["Alerts – Orange", alerts.orange ?? 0],
       ["Alerts – Red", alerts.red ?? 0],
+      ["Records with packaging", k.records_with_packaging ?? 0],
+      ["Records with driver", k.records_with_driver ?? 0],
+      ["Records with vehicle", k.records_with_vehicle ?? 0],
+      ["Records with photos", k.records_with_photos ?? 0],
     ],
   );
 
@@ -72,6 +81,58 @@ export async function downloadGmReportExcel(report, filename) {
     "Stages",
     ["Stage", "Count"],
     stages.map((row) => [row.current_stage, row.count]),
+  );
+
+  const byProductType = Array.isArray(report.records_by_product_type)
+    ? report.records_by_product_type
+    : [];
+  addSheet(
+    wb,
+    "Product Type Mix",
+    ["Product type", "Count", "Total quantity"],
+    byProductType.map((row) => [
+      row.product_type || "Unspecified",
+      row.count ?? 0,
+      row.total_quantity ?? 0,
+    ]),
+  );
+
+  const byUnit = Array.isArray(report.records_by_unit) ? report.records_by_unit : [];
+  addSheet(
+    wb,
+    "Unit Mix",
+    ["Unit", "Count", "Total quantity"],
+    byUnit.map((row) => [row.unit || "Unspecified", row.count ?? 0, row.total_quantity ?? 0]),
+  );
+
+  const byPackaging = Array.isArray(report.records_by_packaging)
+    ? report.records_by_packaging
+    : [];
+  addSheet(
+    wb,
+    "Packaging Mix",
+    ["Packaging", "Count"],
+    byPackaging.map((row) => [row.packaging || "Unspecified", row.count ?? 0]),
+  );
+
+  const byDriver = Array.isArray(report.records_by_driver) ? report.records_by_driver : [];
+  addSheet(
+    wb,
+    "Driver Usage",
+    ["Driver", "Trips", "Total quantity"],
+    byDriver.map((row) => [
+      row.driver_name || "Unspecified",
+      row.count ?? 0,
+      row.total_quantity ?? 0,
+    ]),
+  );
+
+  const byVehicle = Array.isArray(report.records_by_vehicle) ? report.records_by_vehicle : [];
+  addSheet(
+    wb,
+    "Vehicle Usage",
+    ["Vehicle", "Trips"],
+    byVehicle.map((row) => [row.vehicle_details || "Unspecified", row.count ?? 0]),
   );
 
   // Departments sheet
@@ -114,6 +175,11 @@ export async function downloadGmReportExcel(report, filename) {
       "Vendor",
       "Department",
       "Stage",
+      "Product type",
+      "Unit",
+      "Packaging",
+      "Driver",
+      "Vehicle",
       "Alert level",
       "Entry date",
       "Due date",
@@ -124,11 +190,33 @@ export async function downloadGmReportExcel(report, filename) {
       r.vendor || "",
       r.department || "",
       r.stage ?? r.current_stage ?? "",
+      r.product_type || "",
+      r.unit || "",
+      r.packaging || "",
+      r.driver_name || "",
+      r.vehicle_details || "",
       r.alert_level || "",
       r.entry_date || "",
       r.due_date || "",
       r.days_overdue ?? 0,
     ]),
+  );
+
+  const holdingSummary = report?.holding_time_summary || {};
+  const topHolding = Array.isArray(report?.holding_time_top_samples)
+    ? report.holding_time_top_samples
+    : [];
+  addSheet(
+    wb,
+    "Holding Time",
+    ["Metric", "Value"],
+    [
+      ["Sample size", holdingSummary.sample_size ?? 0],
+      ["Average minutes", holdingSummary.avg_minutes ?? 0],
+      ["Minimum minutes", holdingSummary.min_minutes ?? 0],
+      ["Maximum minutes", holdingSummary.max_minutes ?? 0],
+      ...topHolding.map((row, idx) => [`Top ${idx + 1} window (minutes)`, row.duration_minutes ?? 0]),
+    ],
   );
 
   const raw = XLSX.write(wb, { bookType: "xlsx", type: "array" });

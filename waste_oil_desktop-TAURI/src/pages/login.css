@@ -3,6 +3,7 @@
 .login-page {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -211,6 +212,7 @@
 
 .login-page--center {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,5 +226,20 @@
 @media (prefers-reduced-motion: reduce) {
   .login-submit {
     transition: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-page {
+    padding: 1rem 0.75rem 1.25rem;
+  }
+
+  .login-card {
+    padding: 1.35rem 1rem 1.2rem;
+    border-radius: 14px;
+  }
+
+  .login-card__title {
+    font-size: 1.2rem;
   }
 }

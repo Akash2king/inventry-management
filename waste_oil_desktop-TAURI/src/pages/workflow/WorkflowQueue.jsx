@@ -41,6 +41,7 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
 
   useEffect(() => {
     const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       fetchQueue().catch(() => {});
     }, 20000);
     const onVis = () => {

@@ -112,7 +112,7 @@ class WorkflowAPITests(TestCase):
         self._login(self.storeman)
         v, _ = Vendor.objects.get_or_create(
             name=vendor,
-            defaults={"contact": "", "address": "", "notes": ""},
+            defaults={"notes": ""},
         )
         res = self.client.post(
             "/api/v1/records/",
@@ -170,11 +170,19 @@ class WorkflowAPITests(TestCase):
 
     def test_forward_candidates_stage_1(self):
         rid = self._create_record()
+        no_dept = CustomUser.objects.create_user(
+            username="wf_no_dept",
+            email="wf_no_dept@example.com",
+            password="pass12345",
+            role=CustomUser.Role.ADMIN,
+            department=None,
+        )
         self._login(self.storeman)
         res = self.client.get(f"/api/v1/records/{rid}/forward-candidates/")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         ids = {str(row["id"]) for row in res.data}
         self.assertIn(str(self.treatment.id), ids)
+        self.assertNotIn(str(no_dept.id), ids)
 
     def test_forward_candidates_empty_at_stage_5(self):
         rid = self._create_record()
@@ -205,12 +213,26 @@ class WorkflowAPITests(TestCase):
         rec = WasteOilRecord.objects.get(pk=rid)
         self.assertEqual(rec.current_holder_id, treatment_b.id)
         self.assertNotEqual(rec.current_holder_id, self.treatment.id)
+        tr = StageTransition.objects.filter(record_id=rid).order_by("-sequence").first()
+        self.assertIsNotNone(tr)
+        self.assertEqual(tr.to_holder_id, treatment_b.id)
 
-    def test_forward_rejects_next_holder_wrong_stage(self):
+    def test_forward_allows_next_holder_outside_next_stage_with_hierarchy_routing(self):
         rid = self._create_record()
         self.client.credentials()
         res = self._forward(
             self.storeman, rid, next_holder_id=self.admin_u.id
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        rec = WasteOilRecord.objects.get(pk=rid)
+        self.assertEqual(rec.current_holder_id, self.admin_u.id)
+        self.assertEqual(rec.current_stage, self.admin_u.department.stage_order)
+
+    def test_non_manager_cannot_forward_to_gm(self):
+        rid = self._create_record()
+        self.client.credentials()
+        res = self._forward(
+            self.storeman, rid, next_holder_id=self.gm.id
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -397,13 +419,33 @@ class WorkflowAPITests(TestCase):
         self._return(self.treatment, rid, reason="back")
         self._forward(self.storeman, rid, note="again")
         self.client.credentials()
-        self._login(self.treatment)
+        self._login(self.manager)
         res = self.client.get(f"/api/v1/records/{rid}/transitions/")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         types = [row["transition_type"] for row in res.data]
         self.assertEqual(types, ["forward", "return", "forward"])
         stages = [(row["from_stage"], row["to_stage"]) for row in res.data]
         self.assertEqual(stages, [(1, 2), (2, 1), (1, 2)])
+
+    def test_transitions_endpoint_peer_trimmed_manager_full(self):
+        rid = self._create_record()
+        self._forward(self.storeman, rid, note="1")
+        self._forward(self.treatment, rid, note="2")
+        self._forward(self.admin_u, rid, note="3")
+        self._return(self.manager, rid, reason="4")
+        self._forward(self.admin_u, rid, note="5")
+
+        self.client.credentials()
+        self._login(self.treatment)
+        peer = self.client.get(f"/api/v1/records/{rid}/transitions/")
+        self.assertEqual(peer.status_code, status.HTTP_200_OK)
+        self.assertLessEqual(len(peer.data), 3)
+
+        self.client.credentials()
+        self._login(self.manager)
+        full = self.client.get(f"/api/v1/records/{rid}/transitions/")
+        self.assertEqual(full.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(full.data), 5)
 
     def test_queue_sorted_alert_then_collection_date(self):
         # Two records at stage 2, visible to treatment

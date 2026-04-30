@@ -45,7 +45,7 @@ async function buildGmReportPdfBytes(report) {
   };
 
   // Header
-  drawText("Waste Oil Management – GM Monthly Report", 20, {
+  drawText("Chem-Solv Inventory – Monthly Inventory Report", 20, {
     font: fontTitle,
     color: rgb(0.09, 0.2, 0.5),
   });
@@ -232,11 +232,11 @@ export async function savePdfBytes(uint8, filename) {
 }
 
 /**
- * Generate and download a GM monthly report PDF locally (pdf-lib).
+ * Generate and download a Monthly Inventory PDF locally (pdf-lib).
  * Prefer {@link savePdfBytes} with the backend `/reports/gm/monthly/pdf/` for the same PDF as email.
  *
  * @param {object} report Structured report JSON
- * @param {string} filename Suggested file name, e.g. gm_monthly_report_2026-04-01_2026-04-30.pdf
+ * @param {string} filename Suggested file name, e.g. monthly_inventory_2026-04-01_2026-04-30.pdf
  */
 export async function downloadGmReportPdf(report, filename) {
   const bytes = await buildGmReportPdfBytes(report);

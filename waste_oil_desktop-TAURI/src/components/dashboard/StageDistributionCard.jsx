@@ -1,13 +1,6 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { chartTooltip } from "./chartTheme.js";
-
-const STAGE_LABELS = {
-  1: "Storeman",
-  2: "Treatment",
-  3: "Manager",
-  4: "Admin",
-  5: "GM",
-};
+import { STAGE_LABELS } from "@/pages/dashboardConstants.js";
 
 const COLORS = ["#6ec8ff", "#4a90e2", "#7dd8ff", "#3578e5", "#ff9e58"];
 

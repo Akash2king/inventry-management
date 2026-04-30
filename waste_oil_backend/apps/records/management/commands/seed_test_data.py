@@ -1,6 +1,8 @@
 """
-Django management command to seed test data for Waste Oil Management System
-Usage: python manage.py seed_test_data
+Django management command to seed demo data for the current workflow model.
+Usage:
+  python manage.py seed_test_data --clear
+  python manage.py seed_test_data --clear --records 40 --password Demo12345
 """
 
 from datetime import timedelta
@@ -8,249 +10,342 @@ from decimal import Decimal
 from random import choice, randint
 
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import Department, CustomUser
+from apps.accounts.models import CustomUser, Department
 from apps.records.models import Vendor, WasteOilRecord
 from apps.workflow.models import StageTransition
 
+DEPARTMENT_SPECS = [
+    {
+        "name": "Demo - Stock Entry",
+        "code": "STORE",
+        "stage_order": 1,
+        "workflow_layer": Department.WorkflowLayer.PEER,
+    },
+    {
+        "name": "Demo - Treatment Verification",
+        "code": "TREAT",
+        "stage_order": 2,
+        "workflow_layer": Department.WorkflowLayer.PEER,
+    },
+    {
+        "name": "Demo - Admin Validation",
+        "code": "ADMIN",
+        "stage_order": 3,
+        "workflow_layer": Department.WorkflowLayer.PEER,
+    },
+    {
+        "name": "Demo - Manager Approval",
+        "code": "MGR",
+        "stage_order": 4,
+        "workflow_layer": Department.WorkflowLayer.OVERSIGHT,
+    },
+    {
+        "name": "Demo - GM Final Approval",
+        "code": "GM",
+        "stage_order": 5,
+        "workflow_layer": Department.WorkflowLayer.OVERSIGHT,
+    },
+]
+
+USER_SPECS = [
+    {
+        "username": "storeman_demo",
+        "email": "storeman_demo@demo.local",
+        "full_name": "Storeman Demo",
+        "role": CustomUser.Role.STOREMAN,
+        "dept_code": "STORE",
+    },
+    {
+        "username": "treatment_demo",
+        "email": "treatment_demo@demo.local",
+        "full_name": "Treatment Demo",
+        "role": CustomUser.Role.TREATMENT,
+        "dept_code": "TREAT",
+    },
+    {
+        "username": "waste_admin_demo",
+        "email": "waste_admin_demo@demo.local",
+        "full_name": "Waste Admin Demo",
+        "role": CustomUser.Role.ADMIN,
+        "dept_code": "ADMIN",
+    },
+    {
+        "username": "manager_demo",
+        "email": "manager_demo@demo.local",
+        "full_name": "Manager Demo",
+        "role": CustomUser.Role.MANAGER,
+        "dept_code": "MGR",
+    },
+    {
+        "username": "gm_demo",
+        "email": "gm_demo@demo.local",
+        "full_name": "GM Demo",
+        "role": CustomUser.Role.GM,
+        "dept_code": "GM",
+    },
+]
+
 
 class Command(BaseCommand):
-    help = "Seed the database with test data for the Waste Oil Management System"
+    help = "Seed demo departments/users/vendors/records aligned with latest workflow models."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--clear",
             action="store_true",
-            help="Clear existing test data before seeding",
+            help="Clear existing records/transitions/vendors and demo users/departments before seeding.",
+        )
+        parser.add_argument(
+            "--records",
+            type=int,
+            default=40,
+            help="How many demo records to create (default: 40).",
+        )
+        parser.add_argument(
+            "--password",
+            default="Demo12345",
+            help="Password for demo users (default: Demo12345).",
         )
 
+    @transaction.atomic
     def handle(self, *args, **options):
+        record_count = max(5, int(options["records"]))
+        password = options["password"]
         if options["clear"]:
             self.clear_data()
 
-        self.stdout.write("\n" + "=" * 50)
-        self.stdout.write("WASTE OIL MANAGEMENT - TEST DATA GENERATOR")
-        self.stdout.write("=" * 50 + "\n")
+        self.stdout.write("\n" + "=" * 54)
+        self.stdout.write("WASTE OIL MANAGEMENT - DEMO DATA GENERATOR")
+        self.stdout.write("=" * 54 + "\n")
 
         departments = self.create_departments()
-        users = self.create_users(departments)
+        users = self.create_users(departments, password=password)
         vendors = self.create_vendors()
-        records = self.create_waste_oil_records(users, vendors, departments)
-        self.create_stage_transitions(records, departments)
-
+        records = self.create_waste_oil_records(
+            users=users,
+            vendors=vendors,
+            departments=departments,
+            record_count=record_count,
+        )
+        self.create_stage_transitions(records, departments, users)
         self.print_summary()
 
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"\nDemo users ready. Shared password: {password!r}\n"
+            )
+        )
+
     def clear_data(self):
-        """Clear existing test data"""
-        self.stdout.write(self.style.WARNING("Clearing existing data..."))
-        WasteOilRecord.objects.all().delete()
+        self.stdout.write(self.style.WARNING("Clearing existing demo/test data..."))
         StageTransition.objects.all().delete()
+        WasteOilRecord.objects.all().delete()
         Vendor.objects.all().delete()
-        CustomUser.objects.filter(username__startswith="user_").delete()
-        Department.objects.all().delete()
-        self.stdout.write(self.style.SUCCESS("✓ Data cleared\n"))
+        CustomUser.objects.filter(
+            username__in=[s["username"] for s in USER_SPECS]
+        ).delete()
+        Department.objects.filter(
+            code__in=[s["code"] for s in DEPARTMENT_SPECS]
+        ).delete()
+        self.stdout.write(self.style.SUCCESS("[OK] Cleared demo/test data\n"))
 
     def create_departments(self):
-        """Create workflow departments/stages"""
         self.stdout.write("Creating departments...")
-        departments_data = [
-            {"name": "Intake", "code": "INT", "stage_order": 1},
-            {"name": "Treatment", "code": "TRT", "stage_order": 2},
-            {"name": "Analysis", "code": "ANA", "stage_order": 3},
-            {"name": "Approval", "code": "APR", "stage_order": 4},
-            {"name": "Storage", "code": "STO", "stage_order": 5},
-        ]
-
-        departments = []
-        for dept_data in departments_data:
-            dept, created = Department.objects.get_or_create(
-                code=dept_data["code"],
+        departments = {}
+        for spec in DEPARTMENT_SPECS:
+            dept, created = Department.objects.update_or_create(
+                code=spec["code"],
                 defaults={
-                    "name": dept_data["name"],
-                    "stage_order": dept_data["stage_order"],
+                    "name": spec["name"],
+                    "stage_order": spec["stage_order"],
+                    "workflow_layer": spec["workflow_layer"],
                 },
             )
-            departments.append(dept)
-            status = "✓ Created" if created else "→ Exists"
-            self.stdout.write(f"  {status}: {dept.name}")
-
+            departments[spec["code"]] = dept
+            status = "[OK] Created" if created else "[OK] Updated"
+            self.stdout.write(
+                f"  {status}: {dept.name} (stage={dept.stage_order}, layer={dept.workflow_layer})"
+            )
         self.stdout.write("")
         return departments
 
-    def create_users(self, departments):
-        """Create test users with different roles"""
-        self.stdout.write("Creating users...")
-
-        users_data = [
-            {"username": "user_storeman1", "email": "storeman1@test.com", "role": "storeman", "dept_idx": 0},
-            {"username": "user_storeman2", "email": "storeman2@test.com", "role": "storeman", "dept_idx": 0},
-            {"username": "user_treatment1", "email": "treatment1@test.com", "role": "treatment", "dept_idx": 1},
-            {"username": "user_treatment2", "email": "treatment2@test.com", "role": "treatment", "dept_idx": 1},
-            {"username": "user_analyst1", "email": "analyst1@test.com", "role": "manager", "dept_idx": 2},
-            {"username": "user_approver1", "email": "approver1@test.com", "role": "manager", "dept_idx": 3},
-            {"username": "user_admin", "email": "admin@test.com", "role": "admin", "dept_idx": None},
-            {"username": "user_gm", "email": "gm@test.com", "role": "gm", "dept_idx": None},
-        ]
-
-        users = []
-        for user_data in users_data:
-            user, created = CustomUser.objects.get_or_create(
-                username=user_data["username"],
+    def create_users(self, departments, password):
+        self.stdout.write("Creating demo users...")
+        users = {}
+        for spec in USER_SPECS:
+            user, created = CustomUser.objects.update_or_create(
+                username=spec["username"],
                 defaults={
-                    "email": user_data["email"],
-                    "role": user_data["role"],
-                    "full_name": user_data["username"].replace("_", " ").title(),
-                    "department": departments[user_data["dept_idx"]]
-                    if user_data["dept_idx"] is not None
-                    else None,
+                    "email": spec["email"],
+                    "full_name": spec["full_name"],
+                    "role": spec["role"],
+                    "department": departments[spec["dept_code"]],
+                    "is_active": True,
+                    "must_change_password": False,
                 },
             )
-            if created:
-                user.set_password("testpass123")
-                user.save()
-            users.append(user)
-            status = "✓ Created" if created else "→ Exists"
+            user.set_password(password)
+            user.must_change_password = False
+            user.save(update_fields=["password", "must_change_password"])
+            users[spec["username"]] = user
+            status = "[OK] Created" if created else "[OK] Updated"
             self.stdout.write(f"  {status}: {user.username} ({user.role})")
-
         self.stdout.write("")
         return users
 
     def create_vendors(self):
-        """Create test vendors"""
         self.stdout.write("Creating vendors...")
-
-        vendors_data = [
-            {"name": "Green Oil Suppliers Ltd", "contact": "+1-555-0101", "address": "123 Oil St, City"},
-            {"name": "EcoLube Industries", "contact": "+1-555-0102", "address": "456 Clean Ave, Town"},
-            {"name": "Waste Management Corp", "contact": "+1-555-0103", "address": "789 Recycle Rd, Metro"},
-            {"name": "Industrial Fluids Inc", "contact": "+1-555-0104", "address": "321 Factory Ln, District"},
-            {"name": "Premium Oil Recyclers", "contact": "+1-555-0105", "address": "654 Plant Way, Region"},
+        vendor_names = [
+            "Acme Recycling Ltd",
+            "Chem-Solv Industrial Fluids",
+            "EcoLube Industries",
+            "Premium Oil Recyclers",
+            "Green Barrel Traders",
         ]
-
         vendors = []
-        for vendor_data in vendors_data:
-            vendor, created = Vendor.objects.get_or_create(
-                name=vendor_data["name"],
-                defaults={
-                    "contact": vendor_data["contact"],
-                    "address": vendor_data["address"],
-                },
+        for name in vendor_names:
+            vendor, created = Vendor.objects.update_or_create(
+                name=name,
+                defaults={"notes": "Demo vendor"},
             )
             vendors.append(vendor)
-            status = "✓ Created" if created else "→ Exists"
+            status = "[OK] Created" if created else "[OK] Updated"
             self.stdout.write(f"  {status}: {vendor.name}")
-
         self.stdout.write("")
         return vendors
 
-    def create_waste_oil_records(self, users, vendors, departments):
-        """Create test waste oil records with various stages and alert levels"""
-        self.stdout.write("Creating waste oil records...")
+    def _holder_for_stage(self, stage, users):
+        if stage == 1:
+            return users["storeman_demo"]
+        if stage == 2:
+            return users["treatment_demo"]
+        if stage == 3:
+            return users["waste_admin_demo"]
+        if stage == 4:
+            return users["manager_demo"]
+        return users["gm_demo"]
 
-        alert_levels = ["green", "yellow", "red", "completed"]
-        product_types = ["Hydraulic Oil", "Engine Oil", "Gear Oil", "Turbine Oil", "Residual Oil"]
-        units = ["Liters", "Gallons", "Barrels", "Cubic Meters"]
-
+    def create_waste_oil_records(self, users, vendors, departments, record_count):
+        self.stdout.write(f"Creating {record_count} waste oil records...")
+        product_types = [
+            "Hydraulic Oil",
+            "Engine Oil",
+            "Gear Oil",
+            "Turbine Oil",
+            "Residual Oil",
+        ]
+        packaging_opts = ["Drum", "IBC", "Can", "Bulk"]
+        units = ["L", "kg", "pcs"]
+        now = timezone.now()
         records = []
-        base_date = timezone.now()
 
-        for i in range(50):
-            record_number = f"WOR-{2024001 + i}"
-
-            # Determine stage and alert level based on index
-            if i < 10:
-                current_stage = 1
-                alert_level = "green"
-            elif i < 20:
-                current_stage = 2
-                alert_level = choice(["green", "yellow"])
-            elif i < 30:
-                current_stage = 3
-                alert_level = choice(["yellow", "red"])
-            elif i < 40:
-                current_stage = 4
-                alert_level = "yellow"
+        for i in range(record_count):
+            record_number = f"WO-{2026:04d}-{(i + 1):06d}"
+            bucket = i % 5
+            stage = bucket + 1
+            if bucket == 0:
+                alert = WasteOilRecord.AlertLevel.GREEN
+            elif bucket == 1:
+                alert = WasteOilRecord.AlertLevel.YELLOW
+            elif bucket == 2:
+                alert = WasteOilRecord.AlertLevel.ORANGE
+            elif bucket == 3:
+                alert = WasteOilRecord.AlertLevel.RED
             else:
-                current_stage = 5
-                alert_level = "completed"
+                alert = WasteOilRecord.AlertLevel.COMPLETED
 
-            # Create record
-            record, created = WasteOilRecord.objects.get_or_create(
+            holder = self._holder_for_stage(stage, users)
+            entry_date = (now - timedelta(days=randint(4, 55))).date()
+            due_date = entry_date + timedelta(days=randint(7, 24))
+
+            record, created = WasteOilRecord.objects.update_or_create(
                 record_number=record_number,
                 defaults={
                     "vendor": choice(vendors),
-                    "product_description": f"Test waste oil sample {i+1} for processing",
+                    "product_description": f"Demo waste oil lot #{i + 1}",
                     "product_type": choice(product_types),
                     "unit": choice(units),
-                    "quantity": Decimal(str(round(randint(100, 10000) / 10, 2))),
-                    "entry_date": (base_date - timedelta(days=randint(0, 60))).date(),
-                    "due_date": (base_date + timedelta(days=randint(1, 30))).date(),
-                    "current_stage": current_stage,
-                    "alert_level": alert_level,
-                    "current_holder": choice(users),
-                    "current_department": departments[current_stage - 1],
-                    "created_by": choice(users),
-                    "is_locked": alert_level == "completed",
+                    "packaging": choice(packaging_opts),
+                    "quantity": Decimal(str(round(randint(100, 5000) / 10, 3))),
+                    "entry_date": entry_date,
+                    "due_date": due_date,
+                    "driver_name": f"Driver {i % 8 + 1}",
+                    "vehicle_details": f"TN-{10 + i % 89}-{1000 + i}",
+                    "current_stage": stage,
+                    "alert_level": alert,
+                    "current_holder": holder,
+                    "current_department": departments[
+                        DEPARTMENT_SPECS[stage - 1]["code"]
+                    ],
+                    "created_by": users["storeman_demo"],
+                    "is_locked": alert == WasteOilRecord.AlertLevel.COMPLETED,
+                    "remarks": "Auto-generated demo record.",
                 },
             )
+            records.append(record)
+            if (i + 1) % 10 == 0 or i == record_count - 1:
+                status = "created/updated"
+                self.stdout.write(f"  [OK] {i + 1}/{record_count} records {status}")
 
-            if created:
-                records.append(record)
-                status = "✓"
-            else:
-                status = "→"
-
-            if (i + 1) % 10 == 0:
-                self.stdout.write(f"  {status} Created {i + 1}/50 records...")
-
-        self.stdout.write(f"  ✓ All 50 records created\n")
+        self.stdout.write("")
         return records
 
-    def create_stage_transitions(self, records, departments):
-        """Create stage transitions for records"""
-        self.stdout.write("Creating stage transitions...")
-
+    def create_stage_transitions(self, records, departments, users):
+        self.stdout.write("Rebuilding stage transitions...")
+        StageTransition.objects.filter(record__in=records).delete()
         transition_count = 0
 
-        for record in records:
-            if record.current_stage > 1:
-                # Create transitions for stages the record passed through
-                for stage in range(1, record.current_stage):
-                    transition, created = StageTransition.objects.get_or_create(
-                        record=record,
-                        from_stage=stage,
-                        to_stage=stage + 1,
-                        defaults={
-                            "from_department": departments[stage - 1] if stage > 0 else None,
-                            "to_department": departments[stage] if stage < len(departments) else None,
-                            "transition_type": "forward",
-                            "transitioned_by": record.created_by,
-                        },
-                    )
-                    if created:
-                        transition_count += 1
+        forward_by_stage = {
+            1: users["storeman_demo"],
+            2: users["treatment_demo"],
+            3: users["waste_admin_demo"],
+            4: users["manager_demo"],
+        }
 
-        self.stdout.write(f"  ✓ Created {transition_count} stage transitions\n")
+        for record in records:
+            if record.current_stage <= 1:
+                continue
+            sequence = 1
+            for from_stage in range(1, record.current_stage):
+                to_stage = from_stage + 1
+                StageTransition.objects.create(
+                    record=record,
+                    from_stage=from_stage,
+                    to_stage=to_stage,
+                    from_department=departments[DEPARTMENT_SPECS[from_stage - 1]["code"]],
+                    to_department=departments[DEPARTMENT_SPECS[to_stage - 1]["code"]],
+                    transitioned_by=forward_by_stage[from_stage],
+                    to_holder=self._holder_for_stage(to_stage, users),
+                    transition_type=StageTransition.TransitionType.FORWARD,
+                    note="Auto-seeded forward transition.",
+                    sequence=sequence,
+                )
+                sequence += 1
+                transition_count += 1
+
+        self.stdout.write(f"  [OK] Created {transition_count} transitions\n")
 
     def print_summary(self):
-        """Print data summary"""
-        self.stdout.write("=" * 50)
-        self.stdout.write(self.style.SUCCESS("TEST DATA SUMMARY"))
-        self.stdout.write("=" * 50)
-        self.stdout.write(f"Departments:      {Department.objects.count()}")
-        self.stdout.write(f"Users:            {CustomUser.objects.filter(username__startswith='user_').count()}")
-        self.stdout.write(f"Vendors:          {Vendor.objects.count()}")
-        self.stdout.write(f"Records:          {WasteOilRecord.objects.count()}")
-        self.stdout.write(f"  - Stage 1:      {WasteOilRecord.objects.filter(current_stage=1).count()}")
-        self.stdout.write(f"  - Stage 2:      {WasteOilRecord.objects.filter(current_stage=2).count()}")
-        self.stdout.write(f"  - Stage 3:      {WasteOilRecord.objects.filter(current_stage=3).count()}")
-        self.stdout.write(f"  - Stage 4:      {WasteOilRecord.objects.filter(current_stage=4).count()}")
-        self.stdout.write(f"  - Stage 5:      {WasteOilRecord.objects.filter(current_stage=5).count()}")
-        self.stdout.write(f"\nAlert Levels:")
-        for level in ["green", "yellow", "red", "completed"]:
+        self.stdout.write("=" * 54)
+        self.stdout.write(self.style.SUCCESS("DEMO DATA SUMMARY"))
+        self.stdout.write("=" * 54)
+        self.stdout.write(
+            f"Departments:  {Department.objects.filter(code__in=[d['code'] for d in DEPARTMENT_SPECS]).count()}"
+        )
+        self.stdout.write(
+            f"Users:        {CustomUser.objects.filter(username__in=[u['username'] for u in USER_SPECS]).count()}"
+        )
+        self.stdout.write(f"Vendors:      {Vendor.objects.count()}")
+        self.stdout.write(f"Records:      {WasteOilRecord.objects.count()}")
+        for stage in [1, 2, 3, 4, 5]:
+            count = WasteOilRecord.objects.filter(current_stage=stage).count()
+            self.stdout.write(f"  - Stage {stage}:  {count}")
+        self.stdout.write("\nAlert levels:")
+        for level in ["green", "yellow", "orange", "red", "completed"]:
             count = WasteOilRecord.objects.filter(alert_level=level).count()
-            self.stdout.write(f"  - {level.upper():12} {count}")
-        self.stdout.write(f"\nTransitions:      {StageTransition.objects.count()}")
-        self.stdout.write("=" * 50)
-        self.stdout.write(self.style.SUCCESS("\n✅ Test data generation complete!\n"))
+            self.stdout.write(f"  - {level.upper():10} {count}")
+        self.stdout.write(f"\nTransitions: {StageTransition.objects.count()}")
+        self.stdout.write("=" * 54)

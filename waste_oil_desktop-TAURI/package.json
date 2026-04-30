@@ -2,7 +2,7 @@
   "name": "waste-oil-desktop-tauri",
   "version": "0.1.0",
   "private": true,
-  "description": "Waste management desktop client powered by React, Vite, and Tauri",
+  "description": "Chem-Solv Inventory desktop client powered by React, Vite, and Tauri",
   "type": "commonjs",
   "scripts": {
     "frontend:dev": "vite",

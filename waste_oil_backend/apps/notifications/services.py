@@ -110,7 +110,7 @@ class NotificationService:
                 logger.info("forwarded_notification_no_email user=%s", next_holder.pk)
                 return
             name = next_holder.full_name or next_holder.username
-            subject = f"[Waste Management] Record {record.record_number} forwarded to you"
+            subject = f"[Chem-Solv Inventory] Record {record.record_number} forwarded to you"
             body_text = (
                 f"Hello {name},\n\n"
                 "A record has been forwarded to you.\n\n"
@@ -121,7 +121,7 @@ class NotificationService:
                 f"Department: {dept_name}\n"
                 f"Due date: {record.due_date}\n"
                 f"Alert level: {record.alert_level}\n\n"
-                "Please open the Waste Management desktop app and review your queue.\n"
+                "Please open the Chem-Solv Inventory desktop app and review your queue.\n"
             )
             try:
                 html_body = render_to_string(
@@ -151,7 +151,7 @@ class NotificationService:
             recipients.append(gm)
         if not recipients:
             return
-        subject = f"[Waste Management] Record {record.record_number} completed (GM approval)"
+        subject = f"[Chem-Solv Inventory] Record {record.record_number} completed (GM approval)"
         body_text = (
             "A record has been completed at the final stage.\n\n"
             f"{completed_block}"
@@ -197,7 +197,7 @@ class NotificationService:
         name = prev_holder.full_name or prev_holder.username
         from_line = _actor_display(acting_user)
         from_block = f"Returned by: {from_line}\n\n" if from_line else ""
-        subject = f"[Waste Management] Record {record.record_number} returned to your stage"
+        subject = f"[Chem-Solv Inventory] Record {record.record_number} returned to your stage"
         body_text = (
             f"Hello {name},\n\n"
             f"A record has been returned to your department/stage for correction.\n\n"
@@ -207,7 +207,7 @@ class NotificationService:
             f"Current stage: {record.current_stage}\n"
             f"Department: {dept_name}\n\n"
             f"Reason:\n{reason.strip()}\n\n"
-            "Please open the Waste Management desktop app to review and act on this record.\n"
+            "Please open the Chem-Solv Inventory desktop app to review and act on this record.\n"
         )
         try:
             html_body = render_to_string(
@@ -254,7 +254,7 @@ class NotificationService:
         if not recipients:
             return
 
-        subject = f"[Waste Management] SLA {level.upper()} for record {record.record_number}"
+        subject = f"[Chem-Solv Inventory] SLA {level.upper()} for record {record.record_number}"
 
         vendor_name = getattr(record.vendor, "name", "")
         holder_name = getattr(record.current_holder, "full_name", None) or getattr(
@@ -263,7 +263,7 @@ class NotificationService:
         department_name = getattr(record.current_department, "name", "")
 
         body_text = (
-            "Waste Management – SLA Alert\n\n"
+            "Chem-Solv Inventory – SLA Alert\n\n"
             f"Record: {record.record_number}\n"
             f"Vendor: {vendor_name}\n"
             f"Stage: {record.current_stage}\n"
@@ -305,7 +305,7 @@ class NotificationService:
         kpis = report.get("kpis", {}) or {}
         alerts = kpis.get("alerts", {}) or {}
         body_text = (
-            "Waste Management – Monthly GM Report\n\n"
+            "Chem-Solv Inventory – Monthly GM Report\n\n"
             f"Period: {report.get('period', {}).get('from', '—')} to "
             f"{report.get('period', {}).get('to', '—')}\n\n"
             f"Total records: {kpis.get('total_records', 0)}\n"
@@ -342,7 +342,7 @@ class NotificationService:
         attachments = None
         if pdf_bytes:
             p = report.get("period", {}) or {}
-            fname = f"waste_management_monthly_report_{p.get('from', '')}_{p.get('to', '')}.pdf"
+            fname = f"chemsolv_inventory_monthly_report_{p.get('from', '')}_{p.get('to', '')}.pdf"
             attachments = [(fname, pdf_bytes, "application/pdf")]
 
         NotificationService._send_email(
@@ -364,7 +364,7 @@ class NotificationService:
             )
             return
         display_name = (getattr(user, "full_name", None) or "").strip() or user.username
-        subject = "[Waste Management] Your account — sign in and set a new password"
+        subject = "[Chem-Solv Inventory] Your account — sign in and set a new password"
         app_hint = (
             getattr(settings, "FRONTEND_URL", None)
             or getattr(settings, "WELCOME_EMAIL_APP_HINT", None)
@@ -373,10 +373,10 @@ class NotificationService:
         app_hint = str(app_hint).strip()
         body_text = (
             f"Hello {display_name},\n\n"
-            "A GM administrator created your Waste Management account.\n\n"
+            "A GM administrator created your Chem-Solv Inventory account.\n\n"
             f"Username: {user.username}\n"
             f"Initial password: {initial_password}\n\n"
-            "Open the Waste Management desktop app and sign in with the credentials above. "
+            "Open the Chem-Solv Inventory desktop app and sign in with the credentials above. "
             "You will be asked to change your password before you can use the rest of the system.\n\n"
         )
         if app_hint:

@@ -1,5 +1,5 @@
 """
-A4 enterprise-style monthly waste-oil report PDF (lavender / purple theme).
+A4 enterprise-style monthly inventory report PDF (lavender / purple theme).
 Uses actual data from build_gm_monthly_report_payload().
 Table cells use plain strings for compatibility with ReportLab table layout.
 """
@@ -34,6 +34,16 @@ def _s(val, max_len: int = 120) -> str:
     return t if len(t) <= max_len else t[: max_len - 1] + "…"
 
 
+def _minutes_to_text(minutes) -> str:
+    if minutes is None:
+        return "0m"
+    total = max(0, int(minutes))
+    hours, mins = divmod(total, 60)
+    if hours:
+        return f"{hours}h {mins}m"
+    return f"{mins}m"
+
+
 def build_monthly_report_pdf_bytes(report: dict) -> bytes:
     """Return PDF bytes for the given report dict (same shape as API)."""
     buf = BytesIO()
@@ -44,7 +54,7 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
         rightMargin=14 * mm,
         topMargin=12 * mm,
         bottomMargin=12 * mm,
-        title="Waste Management Monthly Report",
+        title="Chem-Solv Inventory Monthly Inventory Report",
     )
     styles = getSampleStyleSheet()
     section_style = ParagraphStyle(
@@ -69,10 +79,12 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
     kpis = report.get("kpis") or {}
     alerts = kpis.get("alerts") or {}
 
+    report_title = report.get("report_title") or "Monthly Inventory Report"
+
     # Header card (strings only inside table)
     hdr = Table(
         [
-            ["WASTE MANAGEMENT — MONTHLY OPERATIONS & SLA REPORT"],
+            [f"CHEM-SOLV INVENTORY — {str(report_title).upper()}"],
             [
                 f"Period: {period.get('from', '—')}  →  {period.get('to', '—')}",
             ],
@@ -100,7 +112,7 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
     story.append(hdr)
     story.append(Spacer(1, 10))
 
-    # KPI strip (4 columns, string cells)
+    # KPI strip (6 columns, string cells)
     kpi_tbl = Table(
         [
             [
@@ -108,6 +120,8 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
                 "Completed",
                 "Active",
                 "Alert mix (G/Y/O/R)",
+                "With packaging",
+                "With driver/vehicle",
             ],
             [
                 str(kpis.get("total_records", 0)),
@@ -119,9 +133,14 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
                     alerts.get("orange", 0),
                     alerts.get("red", 0),
                 ),
+                str(kpis.get("records_with_packaging", 0)),
+                "{}/{}".format(
+                    kpis.get("records_with_driver", 0),
+                    kpis.get("records_with_vehicle", 0),
+                ),
             ],
         ],
-        colWidths=[doc.width / 4.0] * 4,
+        colWidths=[doc.width / 6.0] * 6,
     )
     kpi_tbl.setStyle(
         TableStyle(
@@ -221,16 +240,110 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
         [doc.width * 0.55, doc.width * 0.225, doc.width * 0.225],
     )
 
+    by_product_type = report.get("records_by_product_type") or []
+    add_table_section(
+        "Product type summary",
+        ["Product Type", "Count", "Total Quantity"],
+        [
+            [
+                p.get("product_type") or "Unspecified",
+                p.get("count", 0),
+                p.get("total_quantity", 0),
+            ]
+            for p in by_product_type
+        ],
+        [doc.width * 0.5, doc.width * 0.2, doc.width * 0.3],
+    )
+
+    by_unit = report.get("records_by_unit") or []
+    add_table_section(
+        "Unit usage summary",
+        ["Unit", "Count", "Total Quantity"],
+        [
+            [
+                u.get("unit") or "Unspecified",
+                u.get("count", 0),
+                u.get("total_quantity", 0),
+            ]
+            for u in by_unit
+        ],
+        [doc.width * 0.4, doc.width * 0.2, doc.width * 0.4],
+    )
+
+    by_packaging = report.get("records_by_packaging") or []
+    add_table_section(
+        "Packaging mix",
+        ["Packaging", "Count"],
+        [[p.get("packaging") or "Unspecified", p.get("count", 0)] for p in by_packaging],
+        [doc.width * 0.7, doc.width * 0.3],
+    )
+
+    by_driver = report.get("records_by_driver") or []
+    add_table_section(
+        "Driver usage",
+        ["Driver", "Trips", "Total Quantity"],
+        [
+            [
+                d.get("driver_name") or "Unspecified",
+                d.get("count", 0),
+                d.get("total_quantity", 0),
+            ]
+            for d in by_driver[:20]
+        ],
+        [doc.width * 0.5, doc.width * 0.2, doc.width * 0.3],
+    )
+
+    by_vehicle = report.get("records_by_vehicle") or []
+    add_table_section(
+        "Vehicle usage",
+        ["Vehicle", "Trips"],
+        [[v.get("vehicle_details") or "Unspecified", v.get("count", 0)] for v in by_vehicle[:20]],
+        [doc.width * 0.75, doc.width * 0.25],
+    )
+
+    holding = report.get("holding_time_summary") or {}
+    add_table_section(
+        "Holding time summary",
+        ["Sample Size", "Average", "Minimum", "Maximum"],
+        [[
+            holding.get("sample_size", 0),
+            _minutes_to_text(holding.get("avg_minutes", 0)),
+            _minutes_to_text(holding.get("min_minutes", 0)),
+            _minutes_to_text(holding.get("max_minutes", 0)),
+        ]],
+        [doc.width * 0.2, doc.width * 0.25, doc.width * 0.25, doc.width * 0.3],
+    )
+
+    top_holding = report.get("holding_time_top_samples") or []
+    add_table_section(
+        "Longest handoff windows (sample)",
+        ["Rank", "Duration"],
+        [[idx + 1, _minutes_to_text(s.get("duration_minutes", 0))] for idx, s in enumerate(top_holding)],
+        [doc.width * 0.2, doc.width * 0.8],
+    )
+
     exc = report.get("exceptions") or []
     add_table_section(
         "Exceptions — critical / overdue (sample)",
-        ["Record", "Vendor", "Dept", "Stage", "Alert", "Due", "Days overdue"],
+        [
+            "Record",
+            "Vendor",
+            "Dept",
+            "Stage",
+            "Packaging",
+            "Driver",
+            "Alert",
+            "Due",
+            "Days overdue",
+        ],
         [
             [
                 e.get("record_number", ""),
                 e.get("vendor", ""),
                 e.get("department", ""),
                 e.get("stage", ""),
+                e.get("packaging", ""),
+                e.get("driver_name", ""),
                 e.get("alert_level", ""),
                 e.get("due_date", ""),
                 e.get("days_overdue", 0),
@@ -238,20 +351,22 @@ def build_monthly_report_pdf_bytes(report: dict) -> bytes:
             for e in exc
         ],
         [
-            doc.width * 0.14,
-            doc.width * 0.18,
-            doc.width * 0.16,
-            doc.width * 0.08,
-            doc.width * 0.1,
-            doc.width * 0.14,
             doc.width * 0.12,
+            doc.width * 0.14,
+            doc.width * 0.13,
+            doc.width * 0.07,
+            doc.width * 0.12,
+            doc.width * 0.12,
+            doc.width * 0.09,
+            doc.width * 0.11,
+            doc.width * 0.1,
         ],
     )
 
     story.append(Spacer(1, 8))
     story.append(
         _plain_para(
-            "Waste Management System — confidential operations report. "
+            "Chem-Solv Inventory — confidential operations report. "
             "Data is taken from live records for the selected entry-date range.",
             footer_style,
         )

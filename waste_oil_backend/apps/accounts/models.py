@@ -6,10 +6,19 @@ from django.utils.translation import gettext_lazy as _
 
 
 class Department(models.Model):
+    class WorkflowLayer(models.TextChoices):
+        PEER = "peer", _("Peer")
+        OVERSIGHT = "oversight", _("Oversight")
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=10, unique=True)
     stage_order = models.IntegerField()
+    workflow_layer = models.CharField(
+        max_length=20,
+        choices=WorkflowLayer.choices,
+        default=WorkflowLayer.PEER,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -17,6 +26,7 @@ class Department(models.Model):
         ordering = ["stage_order"]
         indexes = [
             models.Index(fields=["stage_order"]),
+            models.Index(fields=["workflow_layer"]),
         ]
 
     def __str__(self):

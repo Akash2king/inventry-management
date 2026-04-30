@@ -1,3 +1,4 @@
+import { lazy, Suspense, useEffect } from "react";
 import {
   createHashRouter,
   Navigate,
@@ -5,24 +6,51 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore.js";
 import { AuthGuard } from "@/components/layout/AuthGuard.jsx";
 import { Layout } from "@/components/layout/Layout.jsx";
-import { Login } from "@/pages/Login.jsx";
-import { ChangePassword } from "@/pages/ChangePassword.jsx";
-import { RecordList } from "@/pages/records/RecordList.jsx";
-import { RecordCreate } from "@/pages/records/RecordCreate.jsx";
-import { RecordDetail } from "@/pages/records/RecordDetail.jsx";
-import { RecordEdit } from "@/pages/records/RecordEdit.jsx";
-import { WorkflowQueue } from "@/pages/workflow/WorkflowQueue.jsx";
-import { HomeEntry } from "@/pages/HomeEntry.jsx";
-import { GmConsole } from "@/pages/gm/GmConsole.jsx";
-import { VendorsPage } from "@/pages/vendors/VendorsPage.jsx";
+import { PageLoading } from "@/components/layout/PageLoading.jsx";
+
+/** Named-export pages → lazy (smaller cold start for packaged EXE). */
+const Login = lazy(() => import("@/pages/Login.jsx").then((m) => ({ default: m.Login })));
+const ChangePassword = lazy(() =>
+  import("@/pages/ChangePassword.jsx").then((m) => ({ default: m.ChangePassword })),
+);
+const HomeEntry = lazy(() => import("@/pages/HomeEntry.jsx").then((m) => ({ default: m.HomeEntry })));
+const GmConsole = lazy(() => import("@/pages/gm/GmConsole.jsx").then((m) => ({ default: m.GmConsole })));
+const RecordList = lazy(() => import("@/pages/records/RecordList.jsx").then((m) => ({ default: m.RecordList })));
+const RecordCreate = lazy(() =>
+  import("@/pages/records/RecordCreate.jsx").then((m) => ({ default: m.RecordCreate })),
+);
+const RecordDetail = lazy(() =>
+  import("@/pages/records/RecordDetail.jsx").then((m) => ({ default: m.RecordDetail })),
+);
+const RecordEdit = lazy(() => import("@/pages/records/RecordEdit.jsx").then((m) => ({ default: m.RecordEdit })));
+const WorkflowQueue = lazy(() =>
+  import("@/pages/workflow/WorkflowQueue.jsx").then((m) => ({ default: m.WorkflowQueue })),
+);
+const VendorsPage = lazy(() =>
+  import("@/pages/vendors/VendorsPage.jsx").then((m) => ({ default: m.VendorsPage })),
+);
+const AuditLogPage = lazy(() =>
+  import("@/pages/audit/AuditLogPage.jsx").then((m) => ({ default: m.AuditLogPage })),
+);
+
+function SuspensePage({ children }) {
+  return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
+}
 
 function GmOnly({ children }) {
   const role = useAuthStore((s) => s.user?.role);
   if (role !== "gm" && role !== "superadmin") {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function ManagerOrGmOnly({ children }) {
+  const role = useAuthStore((s) => s.user?.role);
+  if (role !== "manager" && role !== "gm") {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -87,32 +115,107 @@ export const router = createHashRouter([
     path: "/",
     element: <RootShell />,
     children: [
-      { path: "login", element: <Login /> },
+      {
+        path: "login",
+        element: (
+          <SuspensePage>
+            <Login />
+          </SuspensePage>
+        ),
+      },
       {
         element: <AuthGuard />,
         children: [
-          { path: "change-password", element: <ChangePassword /> },
+          {
+            path: "change-password",
+            element: (
+              <SuspensePage>
+                <ChangePassword />
+              </SuspensePage>
+            ),
+          },
           {
             element: <PasswordGate />,
             children: [
               {
                 element: <Layout />,
                 children: [
-                  { index: true, element: <HomeEntry /> },
+                  {
+                    index: true,
+                    element: (
+                      <SuspensePage>
+                        <HomeEntry />
+                      </SuspensePage>
+                    ),
+                  },
                   {
                     path: "gm",
                     element: (
                       <GmOnly>
-                        <GmConsole />
+                        <SuspensePage>
+                          <GmConsole />
+                        </SuspensePage>
                       </GmOnly>
                     ),
                   },
-                  { path: "records", element: <RecordList /> },
-                  { path: "vendors", element: <VendorsPage /> },
-                  { path: "records/new", element: <RecordCreate /> },
-                  { path: "records/:id", element: <RecordDetail /> },
-                  { path: "records/:id/edit", element: <RecordEdit /> },
-                  { path: "queue", element: <WorkflowQueue /> },
+                  {
+                    path: "records",
+                    element: (
+                      <SuspensePage>
+                        <RecordList />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "vendors",
+                    element: (
+                      <SuspensePage>
+                        <VendorsPage />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "audit-logs",
+                    element: (
+                      <ManagerOrGmOnly>
+                        <SuspensePage>
+                          <AuditLogPage />
+                        </SuspensePage>
+                      </ManagerOrGmOnly>
+                    ),
+                  },
+                  {
+                    path: "records/new",
+                    element: (
+                      <SuspensePage>
+                        <RecordCreate />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "records/:id",
+                    element: (
+                      <SuspensePage>
+                        <RecordDetail />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "records/:id/edit",
+                    element: (
+                      <SuspensePage>
+                        <RecordEdit />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "queue",
+                    element: (
+                      <SuspensePage>
+                        <WorkflowQueue />
+                      </SuspensePage>
+                    ),
+                  },
                 ],
               },
             ],

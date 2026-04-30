@@ -155,7 +155,7 @@ export function Login() {
               <IconLogo />
             </div>
             <h1 className="login-card__title">Welcome back</h1>
-            <p className="login-card__subtitle">Sign in to Waste Management</p>
+            <p className="login-card__subtitle">Sign in to Chem-Solv Inventory</p>
           </div>
 
           <form onSubmit={onSubmit}>

@@ -15,13 +15,13 @@ class GmEmployeeApiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.dept1 = Department.objects.create(
-            name="D1", code="S1", stage_order=1
+            name="D1", code="S1", stage_order=1, workflow_layer=Department.WorkflowLayer.PEER
         )
         cls.dept2 = Department.objects.create(
-            name="D2", code="S2", stage_order=2
+            name="D2", code="S2", stage_order=2, workflow_layer=Department.WorkflowLayer.PEER
         )
         cls.gm_dept = Department.objects.create(
-            name="GM Dept", code="GMX", stage_order=5
+            name="GM Dept", code="GMX", stage_order=5, workflow_layer=Department.WorkflowLayer.OVERSIGHT
         )
         cls.gm = CustomUser.objects.create_user(
             username="gm_test",
@@ -38,7 +38,7 @@ class GmEmployeeApiTests(TestCase):
             department=cls.dept1,
         )
         cls.dept3 = Department.objects.create(
-            name="D3", code="S3", stage_order=3
+            name="D3", code="S3", stage_order=3, workflow_layer=Department.WorkflowLayer.PEER
         )
         cls.other_gm = CustomUser.objects.create_user(
             username="gm_other",
@@ -62,8 +62,8 @@ class GmEmployeeApiTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK)
         rows = _paginated_results(r.data)
         self.assertGreaterEqual(len(rows), 2)
-        stages = {d["stage_order"] for d in rows}
-        self.assertNotIn(5, stages, "GM should not receive stage-5 dept for assignments")
+        layers = {d["workflow_layer"] for d in rows}
+        self.assertTrue({"peer", "oversight"}.issuperset(layers))
 
     def test_gm_list_excludes_other_gms(self):
         r = self.client.get("/api/v1/gm/employees/")

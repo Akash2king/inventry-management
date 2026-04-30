@@ -9,7 +9,8 @@ function getToken() {
   return useAuthStore.getState().accessToken;
 }
 
-export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClose }) {
+export function ForwardModal({ recordId, onClose }) {
+  const activeRecord = useRecordStore((s) => s.activeRecord);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [loadingCandidates, setLoadingCandidates] = useState(true);
@@ -18,6 +19,10 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
   const [candidateError, setCandidateError] = useState("");
   const [search, setSearch] = useState("");
 
+  const currentStage =
+    activeRecord && String(activeRecord.id) === String(recordId)
+      ? Number(activeRecord.current_stage || 1)
+      : 1;
   const needsAssignee = currentStage < 5;
 
   const filteredCandidates = useMemo(() => {
@@ -75,7 +80,7 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
     e.preventDefault();
     if (needsAssignee) {
       if (candidates.length === 0) {
-        showToast("No active users at the next stage. Add users in GM console.", "error");
+          showToast("No eligible active users found. Add or activate users in GM console.", "error");
         return;
       }
       if (!selectedHolderId) {
@@ -120,16 +125,16 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
         aria-modal="true"
         onClick={(ev) => ev.stopPropagation()}
       >
-        <h3 style={{ marginTop: 0 }}>Forward to {nextStageName}</h3>
+        <h3 style={{ marginTop: 0 }}>Forward Record</h3>
         <form onSubmit={submit}>
           {needsAssignee ? (
             <div className="field" style={{ marginBottom: "0.75rem" }}>
-              <label>Assign to user (next stage)</label>
+              <label>Assign to user (any department under manager scope)</label>
               {loadingCandidates ? (
                 <p style={{ opacity: 0.85, marginTop: 6 }}>Loading users…</p>
               ) : candidates.length === 0 ? (
                 <p style={{ marginTop: 6, color: "var(--clr-danger, #b42318)" }}>
-                  {candidateError || "No eligible users at the next stage."}
+                  {candidateError || "No eligible users found for forwarding."}
                 </p>
               ) : (
                 <>
@@ -162,7 +167,7 @@ export function ForwardModal({ recordId, nextStageName, currentStage = 1, onClos
                   </select>
                   {filteredCandidates.length === 0 && (
                     <p style={{ marginTop: 4, fontSize: "0.8rem", opacity: 0.75 }}>
-                      No matches for this search in the next-stage users.
+                      No matches for this search in eligible users.
                     </p>
                   )}
                 </>

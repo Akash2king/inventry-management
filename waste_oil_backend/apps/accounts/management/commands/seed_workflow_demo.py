@@ -9,11 +9,46 @@ from django.db import transaction
 from apps.accounts.models import CustomUser, Department
 
 SPECS = [
-    ("STORE", "Stock Entry", 1, "storeman", CustomUser.Role.STOREMAN),
-    ("TREAT", "Treatment Verification", 2, "treatment", CustomUser.Role.TREATMENT),
-    ("ADMIN", "Admin Validation", 3, "waste_admin", CustomUser.Role.ADMIN),
-    ("MGR", "Manager Approval", 4, "manager", CustomUser.Role.MANAGER),
-    ("GM", "GM Final Approval", 5, "gm", CustomUser.Role.GM),
+    (
+        "STORE",
+        "Stock Entry",
+        1,
+        Department.WorkflowLayer.PEER,
+        "storeman",
+        CustomUser.Role.STOREMAN,
+    ),
+    (
+        "TREAT",
+        "Treatment Verification",
+        2,
+        Department.WorkflowLayer.PEER,
+        "treatment",
+        CustomUser.Role.TREATMENT,
+    ),
+    (
+        "ADMIN",
+        "Admin Validation",
+        3,
+        Department.WorkflowLayer.PEER,
+        "waste_admin",
+        CustomUser.Role.ADMIN,
+    ),
+    (
+        "MGR",
+        "Manager Approval",
+        4,
+        Department.WorkflowLayer.OVERSIGHT,
+        "manager",
+        CustomUser.Role.MANAGER,
+    ),
+    (
+        "GM",
+        "GM Final Approval",
+        5,
+        Department.WorkflowLayer.OVERSIGHT,
+        "gm",
+        CustomUser.Role.GM,
+    ),
 ]
 
 
@@ -31,16 +66,19 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         password = options["password"]
 
-        for code, name, stage_order, username, role in SPECS:
+        for code, name, stage_order, workflow_layer, username, role in SPECS:
             dept, created = Department.objects.update_or_create(
                 code=code,
                 defaults={
                     "name": f"Demo - {name}",
                     "stage_order": stage_order,
+                    "workflow_layer": workflow_layer,
                 },
             )
             action = "Created" if created else "Updated"
-            self.stdout.write(f"{action} department {code} (stage {stage_order})")
+            self.stdout.write(
+                f"{action} department {code} (stage {stage_order}, layer {workflow_layer})"
+            )
 
             user, ucreated = CustomUser.objects.update_or_create(
                 username=username,

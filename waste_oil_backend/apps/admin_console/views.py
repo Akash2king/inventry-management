@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -93,7 +93,7 @@ def _parse_date_param(value: str | None, *, default=None):
 
 def build_gm_monthly_report_payload(date_from, date_to):
     """
-    Shared helper to build the GM monthly report payload for both the API
+    Shared helper to build the monthly inventory payload for both the API
     endpoint and scheduled email tasks.
     """
     qs = WasteOilRecord.objects.filter(
@@ -114,6 +114,47 @@ def build_gm_monthly_report_payload(date_from, date_to):
         qs.values("current_stage")
         .annotate(count=Count("id"))
         .order_by("current_stage")
+    )
+
+    by_product_type = (
+        qs.values("product_type")
+        .annotate(
+            count=Count("id"),
+            total_quantity=Sum("quantity"),
+        )
+        .order_by("-count", "product_type")
+    )
+
+    by_unit = (
+        qs.values("unit")
+        .annotate(
+            count=Count("id"),
+            total_quantity=Sum("quantity"),
+        )
+        .order_by("-count", "unit")
+    )
+
+    by_packaging = (
+        qs.values("packaging")
+        .annotate(count=Count("id"))
+        .order_by("-count", "packaging")
+    )
+
+    by_driver = (
+        qs.exclude(driver_name="")
+        .values("driver_name")
+        .annotate(
+            count=Count("id"),
+            total_quantity=Sum("quantity"),
+        )
+        .order_by("-count", "driver_name")
+    )
+
+    by_vehicle = (
+        qs.exclude(vehicle_details="")
+        .values("vehicle_details")
+        .annotate(count=Count("id"))
+        .order_by("-count", "vehicle_details")
     )
 
     by_vendor = (
@@ -160,13 +201,57 @@ def build_gm_monthly_report_payload(date_from, date_to):
                 "department": getattr(r.current_department, "name", ""),
                 "stage": r.current_stage,
                 "alert_level": r.alert_level,
+                "product_type": r.product_type,
+                "unit": r.unit,
+                "packaging": r.packaging,
+                "driver_name": r.driver_name,
+                "vehicle_details": r.vehicle_details,
                 "entry_date": r.entry_date.isoformat(),
                 "due_date": r.due_date.isoformat(),
                 "days_overdue": days_overdue,
             }
         )
 
+    transitions_qs = (
+        qs.prefetch_related("stage_transitions")
+        .only("id", "record_number", "created_at", "time_in", "time_out")
+        .order_by("entry_date", "record_number")
+    )
+    holding_samples = []
+    holding_minutes = []
+    for rec in transitions_qs:
+        transition_times = sorted(
+            [tr.timestamp for tr in rec.stage_transitions.all() if tr.timestamp]
+        )
+        if rec.created_at and transition_times:
+            first_minutes = max(
+                0, int((transition_times[0] - rec.created_at).total_seconds() // 60)
+            )
+            holding_minutes.append(first_minutes)
+        for i in range(1, len(transition_times)):
+            minutes = max(
+                0,
+                int((transition_times[i] - transition_times[i - 1]).total_seconds() // 60),
+            )
+            holding_minutes.append(minutes)
+        if rec.time_in and rec.time_out and rec.time_out >= rec.time_in:
+            open_window = max(0, int((rec.time_out - rec.time_in).total_seconds() // 60))
+            holding_minutes.append(open_window)
+
+    if holding_minutes:
+        avg_minutes = round(sum(holding_minutes) / len(holding_minutes), 2)
+        max_minutes = max(holding_minutes)
+        min_minutes = min(holding_minutes)
+    else:
+        avg_minutes = 0
+        max_minutes = 0
+        min_minutes = 0
+
+    for mins in sorted(holding_minutes, reverse=True)[:10]:
+        holding_samples.append({"duration_minutes": mins})
+
     return {
+        "report_title": "Monthly Inventory Report",
         "period": {
             "from": date_from.isoformat(),
             "to": date_to.isoformat(),
@@ -182,8 +267,24 @@ def build_gm_monthly_report_payload(date_from, date_to):
                 "orange": orange_alerts,
                 "red": red_alerts,
             },
+            "records_with_photos": qs.exclude(photo_path="").count(),
+            "records_with_driver": qs.exclude(driver_name="").count(),
+            "records_with_vehicle": qs.exclude(vehicle_details="").count(),
+            "records_with_packaging": qs.exclude(packaging="").count(),
         },
         "records_by_stage": list(by_stage),
+        "records_by_product_type": list(by_product_type),
+        "records_by_unit": list(by_unit),
+        "records_by_packaging": list(by_packaging),
+        "records_by_driver": list(by_driver),
+        "records_by_vehicle": list(by_vehicle),
+        "holding_time_summary": {
+            "sample_size": len(holding_minutes),
+            "avg_minutes": avg_minutes,
+            "min_minutes": min_minutes,
+            "max_minutes": max_minutes,
+        },
+        "holding_time_top_samples": holding_samples,
         "vendors": list(by_vendor),
         "department_workload": list(dept_workload),
         "exceptions": exceptions,
@@ -194,7 +295,7 @@ def build_gm_monthly_report_payload(date_from, date_to):
 @permission_classes([IsAuthenticated, IsGMOrSuperadmin])
 def gm_monthly_report(request):
     """
-    GM-only analytical snapshot for PDF/Excel export.
+    GM-only monthly inventory snapshot for PDF/Excel export.
 
     This endpoint does not itself render a file; it returns a structured JSON
     payload that the desktop client (or a future backend export view) can turn
@@ -220,7 +321,7 @@ def gm_monthly_report(request):
 @permission_classes([IsAuthenticated, IsGMOrSuperadmin])
 def gm_monthly_report_pdf(request):
     """
-    Same data as JSON monthly report, rendered as A4 PDF on the server (ReportLab).
+    Same data as JSON monthly inventory report, rendered as A4 PDF on the server (ReportLab).
     Matches the PDF attached to the monthly GM/Manager email.
     """
     from apps.admin_console.report_pdf import build_monthly_report_pdf_bytes
@@ -235,7 +336,9 @@ def gm_monthly_report_pdf(request):
     report = build_gm_monthly_report_payload(date_from, date_to)
     pdf_bytes = build_monthly_report_pdf_bytes(report)
     p = report.get("period", {}) or {}
-    filename = f"waste_management_monthly_report_{p.get('from', '')}_{p.get('to', '')}.pdf"
+    filename = (
+        f"chemsolv_inventory_monthly_inventory_{p.get('from', '')}_{p.get('to', '')}.pdf"
+    )
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response

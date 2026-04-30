@@ -10,6 +10,18 @@ export function getDepartments(token) {
   return unwrap(window.api.gm.getDepartments(token)).then(asList);
 }
 
+export function createDepartment(data, token) {
+  return unwrap(window.api.gm.createDepartment(data, token));
+}
+
+export function updateDepartment(id, data, token) {
+  return unwrap(window.api.gm.updateDepartment(id, data, token));
+}
+
+export function deleteDepartment(id, token) {
+  return unwrap(window.api.gm.deleteDepartment(id, token));
+}
+
 export function getEmployees(filters, token) {
   return unwrap(window.api.gm.getEmployees(filters, token)).then(asList);
 }
@@ -43,5 +55,5 @@ export async function fetchMonthlyReportPdf(params, token) {
     if (typeof err === "string") throw new Error(err);
     throw new Error(err ? JSON.stringify(err) : "Request failed");
   }
-  return { data: res.data, filename: res.filename || "gm_monthly_report.pdf" };
+  return { data: res.data, filename: res.filename || "monthly_inventory.pdf" };
 }

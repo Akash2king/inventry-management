@@ -6,10 +6,11 @@ import { formatDate, formatQty, slaTotalDays } from "@/utils/formatters.js";
 import { StatusBadge } from "@/components/records/StatusBadge.jsx";
 import { formatHolderLine } from "@/utils/holderDisplay.js";
 import { CorrectionBadge } from "@/components/records/CorrectionBadge.jsx";
-import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
+import { RecordEntryPhoto } from "@/components/records/RecordEntryPhoto.jsx";
 import * as recordsApi from "@/api/records.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
 import { downloadExcelFile } from "@/utils/excelExport.js";
+import { isPeerDashboardRole } from "@/utils/dashboardRoles.js";
 
 const PAGE_SIZE = 20;
 const EXPORT_PAGE_SIZE = 100;
@@ -24,8 +25,8 @@ export function RecordList() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
-  const [vendorModal, setVendorModal] = useState(null);
   const [exportBusy, setExportBusy] = useState(false);
+  const isBelowManager = isPeerDashboardRole(user?.role);
 
   const dateFrom = searchParams.get("date_from") || "";
   const dateTo = searchParams.get("date_to") || "";
@@ -58,9 +59,27 @@ export function RecordList() {
   );
 
   const clearFilters = useCallback(() => {
-    setSearchParams(new URLSearchParams(), { replace: true });
+    const n = new URLSearchParams();
+    setSearchParams(n, { replace: true });
     setPage(1);
   }, [setSearchParams]);
+
+  useEffect(() => {
+    if (!isBelowManager) return;
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+    if (next.get("alert_level") === "completed") {
+      next.delete("alert_level");
+      changed = true;
+    }
+    if (next.get("exclude_completed") === "1") {
+      next.delete("exclude_completed");
+      changed = true;
+    }
+    if (changed) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [isBelowManager, searchParams, setSearchParams]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -69,7 +88,7 @@ export function RecordList() {
     if (stage) n += 1;
     if (vendorSearch.trim()) n += 1;
     if (alertLevel) n += 1;
-    if (excludeCompleted) n += 1;
+    if (excludeCompleted && !isBelowManager) n += 1;
     if (overdue) n += 1;
     if (departmentId) n += 1;
     return n;
@@ -82,6 +101,7 @@ export function RecordList() {
     excludeCompleted,
     overdue,
     departmentId,
+    isBelowManager,
   ]);
 
   useEffect(() => {
@@ -94,7 +114,7 @@ export function RecordList() {
     if (dateTo) filters.date_to = dateTo;
     if (vendorSearch.trim()) filters.search = vendorSearch.trim();
     if (alertLevel) filters.alert_level = alertLevel;
-    if (excludeCompleted) filters.exclude_completed = true;
+    if (excludeCompleted || isBelowManager) filters.exclude_completed = true;
     if (overdue) filters.overdue = true;
     if (departmentId) filters.department_id = departmentId;
     fetchAll(filters).catch(() => {});
@@ -110,6 +130,7 @@ export function RecordList() {
     excludeCompleted,
     overdue,
     departmentId,
+    isBelowManager,
   ]);
 
   const totalPages = Math.max(1, Math.ceil((pagination.count || 0) / PAGE_SIZE));
@@ -124,7 +145,7 @@ export function RecordList() {
       if (dateTo) base.date_to = dateTo;
       if (vendorSearch.trim()) base.search = vendorSearch.trim();
       if (alertLevel) base.alert_level = alertLevel;
-      if (excludeCompleted) base.exclude_completed = true;
+      if (excludeCompleted || isBelowManager) base.exclude_completed = true;
       if (overdue) base.overdue = true;
       if (departmentId) base.department_id = departmentId;
 
@@ -227,7 +248,7 @@ export function RecordList() {
             <option value="yellow">Yellow</option>
             <option value="orange">Orange</option>
             <option value="red">Red</option>
-            <option value="completed">Completed</option>
+            {!isBelowManager ? <option value="completed">Completed</option> : null}
           </select>
         </div>
         <div className="field">
@@ -247,14 +268,16 @@ export function RecordList() {
           />
         </div>
         <div className="field field--checks">
-          <label className="field-checks">
-            <input
-              type="checkbox"
-              checked={excludeCompleted}
-              onChange={(e) => patchParams({ exclude_completed: e.target.checked ? true : "" })}
-            />
-            Active only
-          </label>
+          {!isBelowManager ? (
+            <label className="field-checks">
+              <input
+                type="checkbox"
+                checked={excludeCompleted}
+                onChange={(e) => patchParams({ exclude_completed: e.target.checked ? true : "" })}
+              />
+              Active only
+            </label>
+          ) : null}
           <label className="field-checks">
             <input type="checkbox" checked={overdue} onChange={(e) => patchParams({ overdue: e.target.checked ? true : "" })} />
             Overdue only
@@ -266,10 +289,14 @@ export function RecordList() {
         <table className="data-table">
           <thead>
             <tr>
+              <th>Photo</th>
               <th>Record No</th>
               <th>Vendor</th>
               <th>Product type</th>
+              <th>Packaging</th>
               <th>Qty</th>
+              <th>Driver</th>
+              <th>Vehicle</th>
               <th>Entry</th>
               <th>Due</th>
               <th title="Total calendar days from entry to due (SLA window). Alert uses % of this window elapsed.">
@@ -283,14 +310,14 @@ export function RecordList() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: "2rem" }}>
+                <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
                   <div className="spinner" style={{ margin: "0 auto" }} />
                 </td>
               </tr>
             ) : null}
             {!isLoading && records.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: "2rem" }}>
+                <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
                   No records
                 </td>
               </tr>
@@ -310,31 +337,20 @@ export function RecordList() {
                   onClick={() => navigate(`/records/${r.id}`)}
                 >
                   <td>
+                    {r.photo_path ? <RecordEntryPhoto recordId={r.id} variant="thumb" /> : "—"}
+                  </td>
+                  <td>
                     {r.record_number}
                     {r.needs_workflow_correction ? <CorrectionBadge /> : null}
                   </td>
                   <td>
-                    {r.vendor_id ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ padding: "0.1rem 0.25rem", fontSize: "inherit", textAlign: "left" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVendorModal({
-                            vendorId: String(r.vendor_id),
-                            fallbackName: r.vendor_name || "Vendor",
-                          });
-                        }}
-                      >
-                        {r.vendor_name || "—"}
-                      </button>
-                    ) : (
-                      r.vendor_name || "—"
-                    )}
+                    {r.vendor_name || "—"}
                   </td>
                   <td>{r.product_type || "—"}</td>
+                  <td>{r.packaging || "—"}</td>
                   <td>{formatQty(r.quantity, r.unit)}</td>
+                  <td>{r.driver_name || "—"}</td>
+                  <td>{r.vehicle_details || "—"}</td>
                   <td>{formatDate(r.entry_date)}</td>
                   <td>{formatDate(r.due_date)}</td>
                   <td>{sla ?? "—"}</td>
@@ -349,15 +365,6 @@ export function RecordList() {
           </tbody>
         </table>
       </div>
-
-      {vendorModal ? (
-        <VendorContactModal
-          onClose={() => setVendorModal(null)}
-          detail={vendorModal.detail}
-          vendorId={vendorModal.vendorId}
-          fallbackName={vendorModal.fallbackName}
-        />
-      ) : null}
 
       <div className="pagination-bar">
         <button

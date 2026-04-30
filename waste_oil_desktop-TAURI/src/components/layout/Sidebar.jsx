@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
+import appLogo from "@/assets/app-logo.png";
 
 export function Sidebar() {
   const user = useAuthStore((s) => s.user);
@@ -9,12 +10,10 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="sidebar-brand__mark" aria-hidden>
-          WM
-        </div>
+        <img src={appLogo} className="sidebar-brand__logo" alt="App logo" />
         <div>
-          <div className="sidebar-brand__text">Waste</div>
-          <div className="sidebar-brand__sub">Management</div>
+          <div className="sidebar-brand__text">Chem-Solv</div>
+          <div className="sidebar-brand__sub">Inventory</div>
         </div>
       </div>
       <nav className="sidebar-nav">
@@ -32,6 +31,11 @@ export function Sidebar() {
         {!mustChange ? (
           <NavLink to="/vendors" className={navClass}>
             Vendors
+          </NavLink>
+        ) : null}
+        {!mustChange && (user?.role === "manager" || user?.role === "gm") ? (
+          <NavLink to="/audit-logs" className={navClass}>
+            Audit Logs
           </NavLink>
         ) : null}
         {!mustChange && user?.role === "storeman" ? (

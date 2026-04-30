@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore.js";
 import * as vendorsApi from "@/api/vendors.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
-import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
 import { downloadExcelFile } from "@/utils/excelExport.js";
 
 function getToken() {
@@ -16,18 +15,13 @@ export function VendorsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
-  const [contact, setContact] = useState("");
-  const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
-  const [editContact, setEditContact] = useState("");
-  const [editAddress, setEditAddress] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editBusy, setEditBusy] = useState(false);
-  const [contactCardVendor, setContactCardVendor] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -49,8 +43,6 @@ export function VendorsPage() {
   function openEdit(v) {
     setEditing(v);
     setEditName(v.name || "");
-    setEditContact(v.contact || "");
-    setEditAddress(v.address || "");
     setEditNotes(v.notes || "");
   }
 
@@ -69,16 +61,12 @@ export function VendorsPage() {
       await vendorsApi.create(
         {
           name: name.trim(),
-          contact: contact.trim(),
-          address: address.trim(),
           notes: notes.trim(),
         },
         getToken(),
       );
       showToast("Vendor added", "success");
       setName("");
-      setContact("");
-      setAddress("");
       setNotes("");
       await load();
     } catch (err) {
@@ -101,8 +89,6 @@ export function VendorsPage() {
         editing.id,
         {
           name: editName.trim(),
-          contact: editContact.trim(),
-          address: editAddress.trim(),
           notes: editNotes.trim(),
         },
         getToken(),
@@ -123,9 +109,9 @@ export function VendorsPage() {
       return;
     }
     try {
-      const dataRows = rows.map((v) => [v.name || "", v.contact || "", v.address || "", v.notes || ""]);
+      const dataRows = rows.map((v) => [v.name || "", v.notes || ""]);
       const stamp = new Date().toISOString().slice(0, 10);
-      const saved = await downloadExcelFile(`vendors_export_${stamp}.xlsx`, "Vendors", ["name", "contact", "address", "notes"], dataRows);
+      const saved = await downloadExcelFile(`vendors_export_${stamp}.xlsx`, "Vendors", ["name", "notes"], dataRows);
       if (saved) showToast(`Exported ${rows.length} vendor(s).`, "success");
     } catch (e) {
       showToast(e?.message || "Export failed", "error");
@@ -165,14 +151,6 @@ export function VendorsPage() {
             <div className="field">
               <label htmlFor="v-name">Name</label>
               <input id="v-name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="v-contact">Contact</label>
-              <input id="v-contact" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Phone / email" />
-            </div>
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label htmlFor="v-address">Address</label>
-              <textarea id="v-address" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} />
             </div>
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <label htmlFor="v-notes">Notes</label>
@@ -214,8 +192,6 @@ export function VendorsPage() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Contact</th>
-              <th>Address</th>
               <th>Notes</th>
               {canManage ? <th className="th-actions">Actions</th> : null}
             </tr>
@@ -223,31 +199,22 @@ export function VendorsPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={canManage ? 5 : 4} style={{ textAlign: "center", padding: "2rem" }}>
+                <td colSpan={canManage ? 3 : 2} style={{ textAlign: "center", padding: "2rem" }}>
                   <div className="spinner" style={{ margin: "0 auto" }} />
                 </td>
               </tr>
             ) : null}
             {!loading && rows.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 5 : 4} style={{ textAlign: "center", padding: "2rem" }}>
+                <td colSpan={canManage ? 3 : 2} style={{ textAlign: "center", padding: "2rem" }}>
                   No vendors yet.
                 </td>
               </tr>
             ) : null}
             {!loading &&
               rows.map((v) => (
-                <tr
-                  key={v.id}
-                  onClick={() => setContactCardVendor(v)}
-                  style={{ cursor: "pointer" }}
-                  title="View contact card"
-                >
+                <tr key={v.id}>
                   <td style={{ fontWeight: 600 }}>{v.name}</td>
-                  <td>{v.contact || "—"}</td>
-                  <td style={{ maxWidth: 220, fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>
-                    {v.address || "—"}
-                  </td>
                   <td style={{ maxWidth: 200, fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>
                     {v.notes || "—"}
                   </td>
@@ -267,10 +234,6 @@ export function VendorsPage() {
         </table>
       </div>
 
-      {contactCardVendor ? (
-        <VendorContactModal detail={contactCardVendor} onClose={() => setContactCardVendor(null)} />
-      ) : null}
-
       {editing ? (
         <div className="modal-backdrop" role="presentation" onClick={closeEdit}>
           <div
@@ -287,14 +250,6 @@ export function VendorsPage() {
               <div className="field">
                 <label htmlFor="ev-name">Name</label>
                 <input id="ev-name" value={editName} onChange={(e) => setEditName(e.target.value)} required />
-              </div>
-              <div className="field">
-                <label htmlFor="ev-contact">Contact</label>
-                <input id="ev-contact" value={editContact} onChange={(e) => setEditContact(e.target.value)} />
-              </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label htmlFor="ev-address">Address</label>
-                <textarea id="ev-address" rows={2} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
               </div>
               <div className="field" style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="ev-notes">Notes</label>

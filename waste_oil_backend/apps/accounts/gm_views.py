@@ -1,5 +1,7 @@
 from django.db.models import Q
 from rest_framework import generics, status
+
+from apps.workflow.models import StageTransition
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -9,6 +11,7 @@ from apps.notifications.services import NotificationService
 
 from .gm_serializers import (
     GmDepartmentSerializer,
+    GmDepartmentWriteSerializer,
     GmEmployeeReadSerializer,
     GmEmployeeWriteSerializer,
 )
@@ -24,17 +27,73 @@ GM_MANAGED_ROLES = (
 )
 
 
-class GmDepartmentListView(generics.ListAPIView):
-    """Pipeline departments for assigning employees (stages 1–4 for GM; all for superadmin)."""
+class GmDepartmentListCreateView(generics.ListCreateAPIView):
+    """List and create departments for peer/oversight hierarchy management."""
 
     permission_classes = [IsAuthenticated, IsGMOrSuperadmin]
-    serializer_class = GmDepartmentSerializer
 
     def get_queryset(self):
-        qs = Department.objects.all().order_by("stage_order")
-        if getattr(self.request.user, "role", None) == CustomUser.Role.GM:
-            qs = qs.filter(stage_order__lte=4)
-        return qs
+        return Department.objects.all().order_by("workflow_layer", "stage_order", "name")
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return GmDepartmentWriteSerializer
+        return GmDepartmentSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        dept = serializer.save()
+        AuditLog.objects.create(
+            user=request.user,
+            action=AuditLog.Action.CREATE,
+            description=f"GM created department {dept.name} ({dept.code}) stage {dept.stage_order}.",
+        )
+        read = GmDepartmentSerializer(dept)
+        return Response(read.data, status=status.HTTP_201_CREATED)
+
+
+class GmDepartmentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve / update / delete a department."""
+
+    permission_classes = [IsAuthenticated, IsGMOrSuperadmin]
+    lookup_field = "pk"
+
+    def get_queryset(self):
+        return Department.objects.all()
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return GmDepartmentWriteSerializer
+        return GmDepartmentSerializer
+
+    def perform_update(self, serializer):
+        dept = serializer.save()
+        AuditLog.objects.create(
+            user=self.request.user,
+            action=AuditLog.Action.EDIT,
+            description=f"GM updated department {dept.name} ({dept.code}).",
+        )
+
+    def perform_destroy(self, instance):
+        if instance.members.exists():
+            raise PermissionDenied(
+                "Remove or reassign all users assigned to this department before deleting."
+            )
+        if StageTransition.objects.filter(
+            Q(from_department_id=instance.id) | Q(to_department_id=instance.id)
+        ).exists():
+            raise PermissionDenied(
+                "Cannot delete: workflow history references this department."
+            )
+        name = instance.name
+        code = instance.code
+        instance.delete()
+        AuditLog.objects.create(
+            user=self.request.user,
+            action=AuditLog.Action.DELETE,
+            description=f"GM deleted department {name} ({code}).",
+        )
 
 
 class GmEmployeeListCreateView(generics.ListCreateAPIView):
@@ -42,8 +101,9 @@ class GmEmployeeListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = CustomUser.objects.select_related("department").order_by(
-            "department__stage_order", "username"
+            "department__workflow_layer", "department__stage_order", "username"
         )
+        qs = qs.filter(department__isnull=False)
         if getattr(self.request.user, "role", None) == CustomUser.Role.GM:
             qs = qs.filter(role__in=GM_MANAGED_ROLES)
         dept = self.request.query_params.get("department_id")

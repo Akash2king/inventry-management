@@ -11,7 +11,7 @@ import { ReturnModal } from "@/components/workflow/ReturnModal.jsx";
 import { canActForward, canActReturn, canActEdit, isCurrentHolder } from "@/utils/permissions.js";
 import { nextStageName, prevStageName } from "@/utils/stageLabels.js";
 import { formatHolderLine } from "@/utils/holderDisplay.js";
-import { VendorContactModal } from "@/components/vendors/VendorContactModal.jsx";
+import { RecordEntryPhoto } from "@/components/records/RecordEntryPhoto.jsx";
 
 export function RecordDetail() {
   const { id } = useParams();
@@ -23,7 +23,6 @@ export function RecordDetail() {
   const transitions = useWorkflowStore((s) => s.transitions);
   const [fwdOpen, setFwdOpen] = useState(false);
   const [retOpen, setRetOpen] = useState(false);
-  const [vendorModal, setVendorModal] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -71,7 +70,6 @@ export function RecordDetail() {
   const holderLabel = formatHolderLine(r);
   const readOnlyViewer =
     !r.is_locked && !holderIsViewer && user && ["storeman", "treatment", "admin", "manager", "gm", "superadmin"].includes(user.role);
-  const attachments = Array.isArray(r.attachment_paths) ? r.attachment_paths : [];
   const slaTotal =
     typeof r.sla_total_days === "number" ? r.sla_total_days : slaTotalDays(r.entry_date, r.due_date);
   const daysSinceEntry =
@@ -82,6 +80,7 @@ export function RecordDetail() {
     typeof r.pending_return_feedback === "string" && r.pending_return_feedback.trim()
       ? r.pending_return_feedback.trim()
       : null;
+  const canSeeHoldingTimeline = user?.role === "manager" || user?.role === "gm";
 
   return (
     <div>
@@ -133,120 +132,194 @@ export function RecordDetail() {
         </div>
       ) : null}
 
-      <div className="card" style={{ marginTop: "1rem" }}>
-        <div className="grid-form">
-          <div className="field">
-            <label>Vendor</label>
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
-              <span>{r.vendor?.name ?? r.vendor_name ?? "—"}</span>
-              {r.vendor || r.vendor_id ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    if (r.vendor) setVendorModal({ detail: r.vendor });
-                    else if (r.vendor_id) {
-                      setVendorModal({
-                        vendorId: String(r.vendor_id),
-                        fallbackName: r.vendor_name || "Vendor",
-                      });
-                    }
-                  }}
-                >
-                  Contact card
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <Field label="Vendor contact" value={r.vendor?.contact || "—"} />
-          <Field label="Vendor address" value={r.vendor?.address || "—"} />
-          <Field label="Product description" value={r.product_description || "—"} />
-          <Field label="Product type" value={r.product_type || "—"} />
-          <Field label="Quantity" value={formatQty(r.quantity, r.unit)} />
-          <Field label="Entry date" value={formatDate(r.entry_date)} />
-          <Field label="Due date" value={formatDate(r.due_date)} />
-          <Field
-            label="SLA window"
-            value={
-              slaTotal != null
-                ? `${slaTotal} day${slaTotal === 1 ? "" : "s"} (entry → due)`
-                : "—"
-            }
-          />
-          <Field
-            label="Days since entry"
-            value={typeof daysSinceEntry === "number" ? String(daysSinceEntry) : "—"}
-          />
-          <Field label="Stage" value={String(r.current_stage)} />
-          <Field label="Current holder" value={holderLabel} />
-          <Field label="Department" value={r.current_department_name || "—"} />
-          <Field label="Alert" value={<StatusBadge level={effectiveAlert} />} />
-          <Field label="Locked" value={r.is_locked ? "Yes" : "No"} />
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label>Remarks</label>
-            <div>{r.remarks || "—"}</div>
-          </div>
-          {attachments.length > 0 ? (
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label>Attachments</label>
-              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
-                {attachments.map((p) => (
-                  <li key={p}>{p}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
+      <div style={{ marginTop: "1rem" }}>
+        <WorkflowTimeline record={r} transitions={transitions} horizontal />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: "1rem",
-          marginTop: "1rem",
-        }}
-      >
-        <WorkflowTimeline record={r} transitions={transitions} />
-        <div className="card">
-          <h3 style={{ marginTop: 0, color: "var(--clr-text-bright)" }}>Actions</h3>
-          {showFwd ? (
-            <button type="button" className="btn btn-primary" style={{ marginRight: 8 }} onClick={() => setFwdOpen(true)}>
-              Forward
-            </button>
-          ) : null}
-          {showRet ? (
-            <button type="button" className="btn btn-danger" onClick={() => setRetOpen(true)}>
-              Return
-            </button>
-          ) : null}
-          {!showFwd && !showRet ? (
-            <p style={{ opacity: 0.85, fontSize: "0.9rem", lineHeight: 1.45 }}>
-              {r.is_locked
-                ? "This record is completed and locked."
-                : holderIsViewer
-                  ? "No forward/return from this stage, or your role does not match the current stage."
-                  : `Only the current holder (${holderLabel}) can forward or return.`}
-            </p>
-          ) : null}
-          <div style={{ marginTop: "1rem" }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={!showEdit}
-              title={!showEdit ? "Only the current holder at the active stage can edit" : undefined}
-              onClick={() => navigate(`/records/${id}/edit`)}
-            >
-              Edit record
-            </button>
-            {!showEdit && !r.is_locked ? (
-              <p style={{ marginTop: 8, fontSize: "0.82rem", opacity: 0.8 }}>
-                Editing requires you to be the holder when your role matches stage {r.current_stage}.
-              </p>
-            ) : null}
+      <div className="card record-detail-card" style={{ marginTop: "1rem" }}>
+        <div className="record-detail-hero">
+          <div>
+            <p className="record-detail-hero__eyebrow">Record overview</p>
+            <h3 className="record-detail-hero__title">{r.record_number}</h3>
+          </div>
+          <div className="record-detail-hero__right">
+            <div className="record-detail-actions-inline">
+              {showFwd ? (
+                <button type="button" className="btn btn-primary" onClick={() => setFwdOpen(true)}>
+                  Forward
+                </button>
+              ) : null}
+              {showRet ? (
+                <button type="button" className="btn btn-danger" onClick={() => setRetOpen(true)}>
+                  Return
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={!showEdit}
+                title={!showEdit ? "Only the current holder at the active stage can edit" : undefined}
+                onClick={() => navigate(`/records/${id}/edit`)}
+              >
+                Edit record
+              </button>
+            </div>
           </div>
         </div>
+
+        <Section title="Material details">
+          <div className="record-material-layout">
+            <div className="grid-form record-detail-grid">
+              <div className="field">
+                <label>Vendor</label>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+                  <span className="field-value">{r.vendor?.name ?? r.vendor_name ?? "—"}</span>
+                </div>
+              </div>
+              <Field label="Product description" value={r.product_description || "—"} />
+              <Field label="Product type" value={r.product_type || "—"} />
+              <Field label="Packaging" value={r.packaging || "—"} />
+              <Field label="Quantity" value={formatQty(r.quantity, r.unit)} />
+              <Field label="Driver name" value={r.driver_name || "—"} />
+              <Field label="Vehicle details" value={r.vehicle_details || "—"} />
+              <div className="field record-detail-span-full">
+                <label>Remarks</label>
+                <div className="field-value">{r.remarks || "—"}</div>
+              </div>
+            </div>
+            <div className="record-material-status-col">
+              <div className="record-detail-hero__chips">
+                <div className="record-chip">
+                  <span className="record-chip__label">Stage</span>
+                  <span className="record-chip__value">{r.current_stage}</span>
+                </div>
+                <div className="record-chip">
+                  <span className="record-chip__label">Alert</span>
+                  <span className="record-chip__value"><StatusBadge level={effectiveAlert} /></span>
+                </div>
+                <div className="record-chip">
+                  <span className="record-chip__label">Locked</span>
+                  <span className="record-chip__value">{r.is_locked ? "Yes" : "No"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Entry evidence">
+          <div className="grid-form record-detail-grid record-evidence-grid">
+            {r.photo_path ? (
+              <div className="field record-evidence-card">
+                <label>Entry photo</label>
+                <RecordEntryPhoto
+                  recordId={r.id}
+                  variant="detail"
+                  enablePreviewModal
+                  downloadBaseName={r.record_number}
+                />
+              </div>
+            ) : (
+              <Field label="Entry photo" value="No photo uploaded" />
+            )}
+            <div className="field record-evidence-card record-evidence-summary">
+              <label>SLA and ownership</label>
+              <div className="record-evidence-summary__grid">
+                <div>
+                  <span className="record-evidence-summary__k">Entry date</span>
+                  <span className="record-evidence-summary__v">{formatDate(r.entry_date)}</span>
+                </div>
+                <div>
+                  <span className="record-evidence-summary__k">Due date</span>
+                  <span className="record-evidence-summary__v">{formatDate(r.due_date)}</span>
+                </div>
+                <div>
+                  <span className="record-evidence-summary__k">SLA window</span>
+                  <span className="record-evidence-summary__v">
+                    {slaTotal != null
+                      ? `${slaTotal} day${slaTotal === 1 ? "" : "s"} (entry → due)`
+                      : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="record-evidence-summary__k">Days since entry</span>
+                  <span className="record-evidence-summary__v">
+                    {typeof daysSinceEntry === "number" ? String(daysSinceEntry) : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="record-evidence-summary__k">Current holder</span>
+                  <span className="record-evidence-summary__v">{holderLabel}</span>
+                </div>
+                <div>
+                  <span className="record-evidence-summary__k">Department</span>
+                  <span className="record-evidence-summary__v">{r.current_department_name || "—"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {canSeeHoldingTimeline && Array.isArray(r.holder_time_log) && r.holder_time_log.length > 0 ? (
+          <Section title="Holding timeline (automatic)">
+            <p className="record-detail-help">
+              For the first holder, <strong>in</strong> uses the record <strong>entry date</strong> (calendar day,
+              not clock time from creation). Later holders use the receive time from each forward/return.{" "}
+              <strong>Out</strong> is set automatically when they forward or return.
+            </p>
+            <div className="record-holding-table-wrap">
+              <table className="record-holding-table">
+                <thead>
+                  <tr>
+                    <th>Holder</th>
+                    <th>Username</th>
+                    <th>In</th>
+                    <th>Out</th>
+                    <th>Hold time</th>
+                    <th>Released via</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.holder_time_log.map((row, idx) => (
+                    <tr key={`${row.holder_username || "na"}-${idx}`}>
+                      <td>
+                        <span className="record-detail-holding-name">
+                          {row.holder_name || row.holder_username || "Unassigned"}
+                        </span>
+                      </td>
+                      <td>{row.holder_username ? `@${row.holder_username}` : "—"}</td>
+                      <td>{row.time_in ? formatDate(row.time_in) : "—"}</td>
+                      <td>{row.time_out ? formatDate(row.time_out) : "still holding"}</td>
+                      <td>{row.duration_display ?? "—"}</td>
+                      <td>
+                        {row.released_via === "forward"
+                          ? "Forward"
+                          : row.released_via === "return"
+                            ? "Return"
+                            : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        ) : null}
       </div>
+
+      {!showFwd && !showRet ? (
+        <div className="record-readonly-hint" style={{ marginTop: "1rem" }} role="status">
+          {r.is_locked
+            ? "This record is completed and locked."
+            : holderIsViewer
+              ? "No forward/return from this stage, or your role does not match the current stage."
+              : `Only the current holder (${holderLabel}) can forward or return.`}
+        </div>
+      ) : null}
+      {!showEdit && !r.is_locked ? (
+        <div className="record-readonly-hint" style={{ marginTop: "0.6rem" }} role="status">
+          Editing requires you to be the holder when your role matches stage {r.current_stage}.
+        </div>
+      ) : null}
 
       {fwdOpen ? (
         <ForwardModal
@@ -263,14 +336,6 @@ export function RecordDetail() {
           onClose={() => setRetOpen(false)}
         />
       ) : null}
-      {vendorModal ? (
-        <VendorContactModal
-          onClose={() => setVendorModal(null)}
-          detail={vendorModal.detail}
-          vendorId={vendorModal.vendorId}
-          fallbackName={vendorModal.fallbackName}
-        />
-      ) : null}
     </div>
   );
 }
@@ -279,8 +344,17 @@ function Field({ label, value }) {
   return (
     <div className="field">
       <label>{label}</label>
-      <div style={{ color: "var(--clr-text-bright)" }}>{value}</div>
+      <div className="field-value">{value}</div>
     </div>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <section className="record-detail-section">
+      <h4>{title}</h4>
+      {children}
+    </section>
   );
 }
 

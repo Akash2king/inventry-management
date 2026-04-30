@@ -5,8 +5,8 @@ from .models import Vendor, WasteOilRecord
 
 @admin.register(Vendor)
 class VendorAdmin(admin.ModelAdmin):
-    list_display = ("name", "contact", "created_at")
-    search_fields = ("name", "contact", "address", "notes")
+    list_display = ("name", "created_at")
+    search_fields = ("name", "notes")
     ordering = ("name",)
 
 

@@ -43,9 +43,40 @@ class WorkflowService:
         )
 
     @staticmethod
+    def _forward_candidates_queryset(record: WasteOilRecord, user: CustomUser):
+        """
+        Flexible hierarchy routing:
+        users under manager scope can forward to any active user in that scope
+        (storeman, treatment, admin, manager), across departments.
+        """
+        roles = [
+            CustomUser.Role.STOREMAN,
+            CustomUser.Role.TREATMENT,
+            CustomUser.Role.ADMIN,
+            CustomUser.Role.MANAGER,
+        ]
+        # Business rule: only manager can forward to GM.
+        if getattr(user, "role", None) == CustomUser.Role.MANAGER:
+            roles.append(CustomUser.Role.GM)
+        return (
+            CustomUser.objects.filter(
+                is_active=True,
+                department__isnull=False,
+                role__in=tuple(roles),
+            )
+            .exclude(pk=user.pk)
+            .select_related("department")
+            .order_by("department__workflow_layer", "department__stage_order", "full_name", "username")
+        )
+
+    @staticmethod
     def _resolve_next_holder(
-        next_stage: int, explicit: CustomUser | None
+        record: WasteOilRecord,
+        user: CustomUser,
+        explicit: CustomUser | None,
     ) -> CustomUser:
+        next_stage = record.current_stage + 1
+        candidates = WorkflowService._forward_candidates_queryset(record, user)
         if explicit is not None:
             if not explicit.is_active:
                 raise ValidationError(
@@ -54,22 +85,27 @@ class WorkflowService:
                     },
                     code="invalid",
                 )
-            dept = getattr(explicit, "department", None)
-            if dept is None or dept.stage_order != next_stage:
+            if not candidates.filter(pk=explicit.pk).exists():
                 raise ValidationError(
                     {
                         "next_holder_id": (
-                            "Selected user must belong to the next pipeline stage."
+                            "Selected user is not eligible for forwarding."
                         ),
                     },
                     code="invalid",
                 )
             return explicit
-        picked = WorkflowService._first_holder_for_stage(next_stage)
+        # Backward-compatible default routing: if caller does not specify,
+        # keep classic "next stage" behavior.
+        picked = (
+            candidates.filter(department__stage_order=next_stage)
+            .order_by("date_joined", "id")
+            .first()
+        )
         if picked is None:
             raise ValidationError(
                 {
-                    "detail": f"No active user found for stage {next_stage}.",
+                    "detail": f"No eligible active users available for stage {next_stage}.",
                 },
                 code="invalid",
             )
@@ -114,6 +150,7 @@ class WorkflowService:
                 from_department=from_dept,
                 to_department=from_dept,
                 transitioned_by=user,
+                to_holder=None,
                 transition_type=StageTransition.TransitionType.FORWARD,
                 note=note or None,
             )
@@ -137,14 +174,14 @@ class WorkflowService:
             record.refresh_from_db()
             return record
 
-        next_stage = record.current_stage + 1
-        next_holder = WorkflowService._resolve_next_holder(next_stage, next_holder)
+        next_holder = WorkflowService._resolve_next_holder(record, user, next_holder)
         next_dept = getattr(next_holder, "department", None)
         if next_dept is None:
             raise ValidationError(
                 {"detail": "Next holder has no department assigned."},
                 code="invalid",
             )
+        next_stage = next_dept.stage_order
 
         StageTransition.objects.create(
             record=record,
@@ -154,6 +191,7 @@ class WorkflowService:
             from_department=from_dept,
             to_department=next_dept,
             transitioned_by=user,
+            to_holder=next_holder,
             transition_type=StageTransition.TransitionType.FORWARD,
             note=note or None,
         )
@@ -267,6 +305,7 @@ class WorkflowService:
             from_department=from_dept,
             to_department=prev_dept,
             transitioned_by=user,
+            to_holder=prev_holder,
             transition_type=StageTransition.TransitionType.RETURN,
             note=reason_clean,
         )

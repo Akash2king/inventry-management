@@ -3,13 +3,42 @@ import { create } from "zustand";
 /** Must match `LS_ACCESS` / `LS_REFRESH` in `platform/installBrowserApi.js`. */
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
+const LS_USER = "wom_user_profile";
+
+function readCachedUser() {
+  try {
+    const raw = localStorage.getItem(LS_USER);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistCachedUser(user) {
+  try {
+    if (!user) {
+      localStorage.removeItem(LS_USER);
+      return;
+    }
+    localStorage.setItem(LS_USER, JSON.stringify(user));
+  } catch {
+    /* ignore localStorage failures */
+  }
+}
+
+const bootAccess = localStorage.getItem(LS_ACCESS);
+const bootRefresh = localStorage.getItem(LS_REFRESH);
+const bootUser = readCachedUser();
+const bootAuthenticated = Boolean(bootAccess && bootUser);
 
 export const useAuthStore = create((set, get) => ({
-  user: null,
-  accessToken: null,
-  refreshToken: null,
-  isAuthenticated: false,
-  isLoading: true,
+  user: bootUser,
+  accessToken: bootAccess,
+  refreshToken: bootRefresh,
+  isAuthenticated: bootAuthenticated,
+  isLoading: false,
 
   setUser: (user) => set({ user }),
 
@@ -21,6 +50,7 @@ export const useAuthStore = create((set, get) => ({
         throw new Error(res.error || "Login failed");
       }
       const d = res.data;
+      persistCachedUser(d.user);
       set({
         user: d.user,
         accessToken: d.access_token,
@@ -45,6 +75,20 @@ export const useAuthStore = create((set, get) => ({
     if (!res.ok) {
       throw new Error(res.error || "Could not change password");
     }
+    persistCachedUser(res.data);
+    set({ user: res.data });
+    return res.data;
+  },
+
+  updateProfile: async (payload) => {
+    if (!window.api?.auth?.updateProfile) {
+      throw new Error("API not available");
+    }
+    const res = await window.api.auth.updateProfile(payload || {});
+    if (!res.ok) {
+      throw new Error(res.error || "Could not update profile");
+    }
+    persistCachedUser(res.data);
     set({ user: res.data });
     return res.data;
   },
@@ -56,6 +100,7 @@ export const useAuthStore = create((set, get) => ({
     } catch {
       /* ignore */
     }
+    persistCachedUser(null);
     set({
       user: null,
       accessToken: null,
@@ -65,9 +110,13 @@ export const useAuthStore = create((set, get) => ({
   },
 
   restoreSession: async () => {
-    set({ isLoading: true });
+    const hasBootSession = Boolean(get().accessToken && get().user);
+    if (!hasBootSession) {
+      set({ isLoading: true });
+    }
     try {
       if (!window.api?.auth?.me) {
+        persistCachedUser(null);
         set({
           user: null,
           accessToken: null,
@@ -79,6 +128,7 @@ export const useAuthStore = create((set, get) => ({
       }
       const res = await window.api.auth.me();
       if (res.ok) {
+        persistCachedUser(res.data);
         set({
           user: res.data,
           accessToken: localStorage.getItem(LS_ACCESS),
@@ -87,6 +137,11 @@ export const useAuthStore = create((set, get) => ({
           isLoading: false,
         });
       } else {
+        if (hasBootSession && res.status !== 401) {
+          set({ isLoading: false });
+          return;
+        }
+        persistCachedUser(null);
         set({
           user: null,
           accessToken: null,
@@ -96,6 +151,11 @@ export const useAuthStore = create((set, get) => ({
         });
       }
     } catch {
+      if (hasBootSession) {
+        set({ isLoading: false });
+        return;
+      }
+      persistCachedUser(null);
       set({
         user: null,
         accessToken: null,

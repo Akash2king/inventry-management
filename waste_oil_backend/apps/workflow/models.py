@@ -45,6 +45,14 @@ class StageTransition(models.Model):
         related_name="stage_transitions_made",
         db_column="transitioned_by_id",
     )
+    to_holder = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stage_transitions_received",
+        db_column="to_holder_id",
+    )
     transition_type = models.CharField(
         max_length=10,
         choices=TransitionType.choices,

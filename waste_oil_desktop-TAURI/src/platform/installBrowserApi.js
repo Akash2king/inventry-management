@@ -6,6 +6,17 @@ import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
 
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
+const API_TIMEOUT_MS = 12000;
+
+async function fetchWithTimeout(url, init, timeoutMs = API_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function buildRecordsQuery(filters = {}) {
   const p = new URLSearchParams();
@@ -66,9 +77,14 @@ function createBrowserApi(baseUrl) {
 
     let res;
     try {
-      res = await fetch(url, init);
+      res = await fetchWithTimeout(url, init);
     } catch (e) {
-      return { ok: false, status: 0, error: e.message || "Network error" };
+      const isTimeout = e?.name === "AbortError";
+      return {
+        ok: false,
+        status: 0,
+        error: isTimeout ? "Request timeout. Please check backend connectivity." : e.message || "Network error",
+      };
     }
 
     const text = await res.text();
@@ -128,9 +144,14 @@ function createBrowserApi(baseUrl) {
     }
     let res;
     try {
-      res = await fetch(url, { method: "GET", headers });
+      res = await fetchWithTimeout(url, { method: "GET", headers });
     } catch (e) {
-      return { ok: false, status: 0, error: e.message || "Network error" };
+      const isTimeout = e?.name === "AbortError";
+      return {
+        ok: false,
+        status: 0,
+        error: isTimeout ? "Request timeout. Please check backend connectivity." : e.message || "Network error",
+      };
     }
     if (res.status === 401) {
       if (authToken) {
@@ -169,7 +190,7 @@ function createBrowserApi(baseUrl) {
     }
     const buf = await res.arrayBuffer();
     const cd = res.headers.get("Content-Disposition") || "";
-    let filename = "gm_monthly_report.pdf";
+    let filename = "monthly_inventory.pdf";
     const m = cd.match(/filename="([^"]+)"/) || cd.match(/filename=([^;\s]+)/);
     if (m) {
       filename = (m[1] || m[2] || filename).trim();
@@ -179,6 +200,72 @@ function createBrowserApi(baseUrl) {
       status: res.status,
       data: new Uint8Array(buf),
       filename,
+    };
+  }
+
+  /** GET image or other binary body with JWT; returns Blob. */
+  async function requestBlobGet(path, tokenArg) {
+    const url = `${base}/${path.replace(/^\//, "")}`;
+    const headers = {};
+    const authToken =
+      tokenArg !== undefined && tokenArg !== null && tokenArg !== ""
+        ? tokenArg
+        : localStorage.getItem(LS_ACCESS);
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+    let res;
+    try {
+      res = await fetchWithTimeout(url, { method: "GET", headers });
+    } catch (e) {
+      const isTimeout = e?.name === "AbortError";
+      return {
+        ok: false,
+        status: 0,
+        error: isTimeout ? "Request timeout. Please check backend connectivity." : e.message || "Network error",
+      };
+    }
+    if (res.status === 401) {
+      if (authToken) {
+        localStorage.removeItem(LS_ACCESS);
+        localStorage.removeItem(LS_REFRESH);
+        window.dispatchEvent(new CustomEvent("wom:auth-expired"));
+      }
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      return {
+        ok: false,
+        status: res.status,
+        error: formatError(data),
+        data,
+      };
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      return {
+        ok: false,
+        status: res.status,
+        error: formatError(data),
+        data,
+      };
+    }
+    const blob = await res.blob();
+    return {
+      ok: true,
+      status: res.status,
+      blob,
+      contentType: res.headers.get("Content-Type") || "",
     };
   }
 
@@ -260,6 +347,27 @@ function createBrowserApi(baseUrl) {
         form.append("file", file);
         return request("POST", `records/${id}/attachments/`, { body: form });
       },
+      uploadPhoto: async (id, file, tokenArg) => {
+        if (!file) {
+          return { ok: false, status: 0, error: "No file" };
+        }
+        const form = new FormData();
+        form.append("file", file);
+        return request("POST", `records/${id}/photo/`, { body: form, token: tokenArg });
+      },
+      getEntryPhoto: async (id, tokenArg) =>
+        requestBlobGet(`records/${id}/photo/`, tokenArg),
+      listOptions: async (filters, tokenArg) => {
+        const p = new URLSearchParams();
+        if (filters?.category) p.set("category", filters.category);
+        const q = p.toString();
+        const path = q ? `records/options/?${q}` : "records/options/";
+        return request("GET", path, { token: tokenArg });
+      },
+      createOption: async (data, tokenArg) =>
+        request("POST", "records/options/", { json: data, token: tokenArg }),
+      deleteOption: async (id, tokenArg) =>
+        request("DELETE", `records/options/${id}/`, { token: tokenArg }),
     },
     workflow: {
       forward: async (id, payload, tokenArg) => {
@@ -292,7 +400,14 @@ function createBrowserApi(baseUrl) {
         }),
     },
     gm: {
-      getDepartments: async () => request("GET", "gm/departments/"),
+      getDepartments: async (tokenArg) =>
+        request("GET", "gm/departments/", { token: tokenArg }),
+      createDepartment: async (data, tokenArg) =>
+        request("POST", "gm/departments/", { json: data, token: tokenArg }),
+      updateDepartment: async (id, data, tokenArg) =>
+        request("PATCH", `gm/departments/${id}/`, { json: data, token: tokenArg }),
+      deleteDepartment: async (id, tokenArg) =>
+        request("DELETE", `gm/departments/${id}/`, { token: tokenArg }),
       getEmployees: async (filters) => {
         const p = new URLSearchParams();
         if (filters?.department_id) p.set("department_id", filters.department_id);
@@ -328,6 +443,10 @@ function createBrowserApi(baseUrl) {
           : "admin-console/reports/gm/monthly/pdf/";
         return requestPdfGet(path, tokenArg);
       },
+    },
+    audit: {
+      getLogs: async (queryString = "", tokenArg) =>
+        request("GET", `audit/logs/${queryString || ""}`, { token: tokenArg }),
     },
     onAuthExpired: (callback) => {
       const fn = () => callback();

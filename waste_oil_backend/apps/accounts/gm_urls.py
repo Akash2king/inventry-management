@@ -5,8 +5,13 @@ from . import gm_views
 urlpatterns = [
     path(
         "departments/",
-        gm_views.GmDepartmentListView.as_view(),
+        gm_views.GmDepartmentListCreateView.as_view(),
         name="gm-departments",
+    ),
+    path(
+        "departments/<uuid:pk>/",
+        gm_views.GmDepartmentDetailView.as_view(),
+        name="gm-departments-detail",
     ),
     path(
         "employees/",

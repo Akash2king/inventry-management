@@ -7,6 +7,7 @@ import { canActEdit } from "@/utils/permissions.js";
 import { formatHolderLine } from "@/utils/holderDisplay.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
 import * as vendorsApi from "@/api/vendors.js";
+import * as recordsApi from "@/api/records.js";
 
 function getToken() {
   return useAuthStore.getState().accessToken;
@@ -21,6 +22,7 @@ export function RecordEdit() {
   const activeRecord = useRecordStore((s) => s.activeRecord);
   const [busy, setBusy] = useState(false);
   const [vendors, setVendors] = useState([]);
+  const [optionSets, setOptionSets] = useState({});
 
   useEffect(() => {
     if (id) fetchOne(id).catch(() => {});
@@ -35,6 +37,45 @@ export function RecordEdit() {
       })
       .catch(() => setVendors([]));
   }, []);
+
+  useEffect(() => {
+    const cats = ["product_type", "unit", "driver_name", "packaging"];
+    Promise.all(cats.map((c) => recordsApi.listOptions({ category: c }, getToken())))
+      .then((res) => {
+        const next = {};
+        cats.forEach((c, idx) => {
+          next[c] = Array.isArray(res[idx]) ? res[idx] : res[idx]?.results || [];
+        });
+        setOptionSets(next);
+      })
+      .catch(() => setOptionSets({}));
+  }, []);
+
+  async function handleCreateOption(category, value) {
+    try {
+      const created = await recordsApi.createOption({ category, value }, getToken());
+      setOptionSets((prev) => ({
+        ...prev,
+        [category]: [...(prev[category] || []), created].sort((a, b) => (a.value || "").localeCompare(b.value || "")),
+      }));
+      showToast("Option added", "success");
+    } catch (e) {
+      showToast(e.message || "Could not add option", "error");
+    }
+  }
+
+  async function handleDeleteOption(category, option) {
+    try {
+      await recordsApi.deleteOption(option.id, getToken());
+      setOptionSets((prev) => ({
+        ...prev,
+        [category]: (prev[category] || []).filter((x) => x.id !== option.id),
+      }));
+      showToast("Option deleted", "success");
+    } catch (e) {
+      showToast(e.message || "Could not delete option", "error");
+    }
+  }
 
   const r = activeRecord;
   if (!r || String(r.id) !== String(id)) {
@@ -55,14 +96,21 @@ export function RecordEdit() {
         product_description: data.product_description || "",
         product_type: data.product_type,
         unit: data.unit,
+        packaging: data.packaging || "",
         quantity: String(data.quantity),
         entry_date: data.entry_date,
+        driver_name: data.driver_name || "",
+        vehicle_details: data.vehicle_details || "",
         remarks: data.remarks || "",
       };
       if (data.due_date && String(data.due_date).trim()) {
         payload.due_date = data.due_date;
       }
       await updateRecord(id, payload);
+      const photo = data.photo_file || null;
+      if (photo) {
+        await recordsApi.uploadPhoto(id, photo, getToken());
+      }
       showToast("Record updated", "success");
       navigate(`/records/${id}`);
     } catch (e) {
@@ -77,9 +125,13 @@ export function RecordEdit() {
     product_description: r.product_description || "",
     product_type: r.product_type || "",
     unit: r.unit || "",
+    packaging: r.packaging || "",
     quantity: r.quantity,
     entry_date: r.entry_date || "",
     due_date: r.due_date || "",
+    driver_name: r.driver_name || "",
+    vehicle_details: r.vehicle_details || "",
+    photo_file: null,
     remarks: r.remarks || "",
   };
 
@@ -116,6 +168,10 @@ export function RecordEdit() {
             key={r.updated_at || r.id}
             vendors={vendors}
             defaultValues={defaults}
+            optionSets={optionSets}
+            optionManageEnabled={user?.role === "storeman" || user?.role === "gm" || user?.role === "superadmin"}
+            onCreateOption={handleCreateOption}
+            onDeleteOption={handleDeleteOption}
             onSubmit={onSubmit}
             onCancel={() => navigate(`/records/${id}`)}
             submitLabel="Save"

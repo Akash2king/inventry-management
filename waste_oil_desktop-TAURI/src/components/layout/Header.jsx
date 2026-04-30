@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 import { useUiStore } from "@/store/uiStore.js";
 import { ToastContainer } from "@/components/ui/ToastContainer.jsx";
+import appLogo from "@/assets/app-logo.png";
 
 function initials(user) {
   const n = user?.full_name || user?.username || "?";
@@ -20,7 +21,8 @@ export function Header() {
   return (
     <header className="header-bar">
       <div className="header-bar__brand">
-        <h1>Waste Management</h1>
+        <img src={appLogo} alt="App logo" className="header-bar__logo" />
+        <h1>Chem-Solv Inventory</h1>
         <ToastContainer />
       </div>
       <div className="header-user">
@@ -35,7 +37,10 @@ export function Header() {
         </button>
         <div className="header-user__meta">
           <span className="header-user__name">{user?.full_name || user?.username || "User"}</span>
-          <span className="header-user__role">{user?.role || ""}</span>
+          <span className="header-user__role">
+            {user?.username ? `@${user.username}` : ""}
+            {user?.role ? (user?.username ? ` • ${user.role}` : user.role) : ""}
+          </span>
         </div>
         <div className="header-user__avatar" aria-hidden>
           {initials(user)}

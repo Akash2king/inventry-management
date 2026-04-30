@@ -9,7 +9,12 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import CustomUser
 from apps.accounts.permissions import IsCurrentHolder
-from apps.records.serializers import RecordDetailSerializer, StageTransitionSerializer
+from apps.records.serializers import (
+    RecordDetailSerializer,
+    StageTransitionSerializer,
+    peer_stage_transition_window,
+    stage_transitions_view_for_user,
+)
 from apps.records.views import records_visible_to_user, workflow_queue_stage_for_user
 from apps.records.workflow_attention import (
     annotate_workflow_attention_queryset,
@@ -64,7 +69,7 @@ class RecordForwardView(APIView):
 
 
 class RecordForwardCandidatesView(APIView):
-    """Active users at the next pipeline stage (for choosing who receives the record)."""
+    """Active users eligible under manager-level hierarchy routing."""
 
     permission_classes = [IsAuthenticated, IsCurrentHolder]
 
@@ -73,15 +78,7 @@ class RecordForwardCandidatesView(APIView):
         self.check_object_permissions(request, record)
         if record.current_stage >= 5:
             return Response([])
-        next_stage = record.current_stage + 1
-        qs = (
-            CustomUser.objects.filter(
-                is_active=True,
-                department__stage_order=next_stage,
-            )
-            .select_related("department")
-            .order_by("full_name", "username")
-        )
+        qs = WorkflowService._forward_candidates_queryset(record, request.user)
         return Response(ForwardCandidateSerializer(qs, many=True).data)
 
 
@@ -111,13 +108,17 @@ class RecordTransitionsView(APIView):
 
     def get(self, request, record_id, *args, **kwargs):
         record = _record_for_user(request.user, record_id)
-        qs = (
+        qs = list(
             record.stage_transitions.select_related(
-                "transitioned_by", "from_department", "to_department"
+                "transitioned_by", "to_holder", "from_department", "to_department"
             )
             .order_by("sequence", "timestamp")
         )
-        return Response(StageTransitionSerializer(qs, many=True).data)
+        if stage_transitions_view_for_user(request.user) == "full":
+            out = qs
+        else:
+            out = peer_stage_transition_window(qs, record, user=request.user)
+        return Response(StageTransitionSerializer(out, many=True).data)
 
 
 class WorkflowQueueView(APIView):

@@ -20,13 +20,16 @@ class WasteOilRecordAPITests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.dept1 = Department.objects.create(
-            name="StoreMan", code="STM", stage_order=1
+            name="StoreMan", code="STM", stage_order=1, workflow_layer=Department.WorkflowLayer.PEER
         )
         cls.dept2 = Department.objects.create(
-            name="Treatment", code="TRT", stage_order=2
+            name="Treatment", code="TRT", stage_order=2, workflow_layer=Department.WorkflowLayer.PEER
         )
         cls.dept3 = Department.objects.create(
-            name="Admin", code="ADM", stage_order=3
+            name="Admin", code="ADM", stage_order=3, workflow_layer=Department.WorkflowLayer.PEER
+        )
+        cls.dept4 = Department.objects.create(
+            name="Manager stage", code="WOM4", stage_order=4, workflow_layer=Department.WorkflowLayer.OVERSIGHT
         )
 
     def setUp(self):
@@ -57,9 +60,9 @@ class WasteOilRecordAPITests(TestCase):
             email="mg@example.com",
             password="pass12345",
             role=CustomUser.Role.MANAGER,
-            department=self.dept3,
+            department=self.dept4,
         )
-        self.vendor = Vendor.objects.create(name="Default Vendor", contact="555")
+        self.vendor = Vendor.objects.create(name="Default Vendor")
 
     def _add_transition(self, record_id, **kwargs):
         """Stable per-record ordering (matches WorkflowService) — avoids timestamp/UUID tie issues."""
@@ -139,7 +142,7 @@ class WasteOilRecordAPITests(TestCase):
         self.assertEqual(patch.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_current_holder_can_edit(self):
-        v2 = Vendor.objects.create(name="NewNameVendor", contact="x")
+        v2 = Vendor.objects.create(name="NewNameVendor")
         self._login(self.storeman)
         cre = self.client.post(
             "/api/v1/records/", self._record_payload(), format="json"
@@ -175,14 +178,14 @@ class WasteOilRecordAPITests(TestCase):
         self.assertIn("locked", patch.data["detail"].lower())
 
     def test_role_based_list_filtering(self):
-        v_only = Vendor.objects.create(name="OnlyStoreman", contact="")
+        v_only = Vendor.objects.create(name="OnlyStoreman")
         self._login(self.storeman)
         self.client.post(
             "/api/v1/records/",
             self._record_payload(vendor_id=str(v_only.id)),
             format="json",
         )
-        v_other = Vendor.objects.create(name="OtherPartyRecord", contact="")
+        v_other = Vendor.objects.create(name="OtherPartyRecord")
         WasteOilRecord.objects.create(
             record_number="WO-TEST-OTHER-1",
             vendor=v_other,
@@ -206,22 +209,51 @@ class WasteOilRecordAPITests(TestCase):
 
         self._login(self.storeman)
         sm_list = self.client.get("/api/v1/records/")
-        self.assertEqual(len(sm_list.data["results"]), 2)
+        # Below manager scope: only own holding / forwarded records.
+        self.assertEqual(len(sm_list.data["results"]), 1)
         sm_vendors = {r["vendor_name"] for r in sm_list.data["results"]}
-        self.assertEqual(sm_vendors, {"OnlyStoreman", "OtherPartyRecord"})
+        self.assertEqual(sm_vendors, {"OnlyStoreman"})
 
         rec = WasteOilRecord.objects.get(vendor__name="OnlyStoreman")
         WasteOilRecord.objects.filter(pk=rec.pk).update(current_stage=2)
         self._login(self.treatment)
         tr_list = self.client.get("/api/v1/records/")
-        self.assertEqual(len(tr_list.data["results"]), 1)
+        self.assertEqual(len(tr_list.data["results"]), 0)
 
         self._login(self.admin_u)
         ad_list = self.client.get("/api/v1/records/")
         self.assertEqual(len(ad_list.data["results"]), 0)
 
+    def test_below_manager_never_sees_completed_records(self):
+        v = Vendor.objects.create(name="CompletedHiddenForPeer")
+        self._login(self.storeman)
+        cre = self.client.post(
+            "/api/v1/records/",
+            self._record_payload(vendor_id=str(v.id)),
+            format="json",
+        )
+        rid = cre.data["id"]
+        WasteOilRecord.objects.filter(pk=rid).update(
+            current_stage=1,
+            current_holder=self.storeman,
+            current_department=self.dept1,
+            alert_level=WasteOilRecord.AlertLevel.COMPLETED,
+        )
+
+        self._login(self.storeman)
+        sm_list = self.client.get("/api/v1/records/")
+        self.assertEqual(sm_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(sm_list.data["results"]), 0)
+        sm_detail = self.client.get(f"/api/v1/records/{rid}/")
+        self.assertEqual(sm_detail.status_code, status.HTTP_404_NOT_FOUND)
+
+        self._login(self.manager)
+        mgr_list = self.client.get("/api/v1/records/?alert_level=completed")
+        self.assertEqual(mgr_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mgr_list.data["results"]), 1)
+
     def test_detail_shows_return_correction_until_forwarded_again(self):
-        v = Vendor.objects.create(name="ReturnedOnce", contact="")
+        v = Vendor.objects.create(name="ReturnedOnce")
         self._login(self.storeman)
         cre = self.client.post(
             "/api/v1/records/",
@@ -286,7 +318,7 @@ class WasteOilRecordAPITests(TestCase):
         self.assertIsNone(detail2.data["pending_return_feedback"])
 
     def test_treatment_still_sees_record_after_forwarding_via_transition(self):
-        v = Vendor.objects.create(name="ForwardedAway", contact="")
+        v = Vendor.objects.create(name="ForwardedAway")
         self._login(self.storeman)
         cre = self.client.post(
             "/api/v1/records/",
@@ -306,6 +338,7 @@ class WasteOilRecordAPITests(TestCase):
             from_department=self.dept1,
             to_department=self.dept2,
             transitioned_by=self.treatment,
+            to_holder=self.admin_u,
             transition_type=StageTransition.TransitionType.FORWARD,
             note="picked up",
         )
@@ -320,6 +353,61 @@ class WasteOilRecordAPITests(TestCase):
         self.assertEqual(detail.data["vendor_name"], "ForwardedAway")
         self.assertFalse(detail.data["viewer_is_holder"])
         self.assertEqual(detail.data["current_holder_username"], self.admin_u.username)
+        # Peer users should still see the transition they forwarded, including target user.
+        forwarded = [
+            t
+            for t in detail.data.get("stage_transitions", [])
+            if t.get("transitioned_by_username") == self.treatment.username
+            and t.get("transition_type") == "forward"
+        ]
+        self.assertTrue(forwarded)
+        self.assertEqual(forwarded[-1].get("to_holder_username"), self.admin_u.username)
+
+    def test_below_manager_user_does_not_see_return_only_history(self):
+        """Below-manager users only keep visibility via current holding or forwarded transitions."""
+        v = Vendor.objects.create(name="ReturnOnly")
+        self._login(self.storeman)
+        cre = self.client.post(
+            "/api/v1/records/",
+            self._record_payload(vendor_id=str(v.id)),
+            format="json",
+        )
+        rid = cre.data["id"]
+        WasteOilRecord.objects.filter(pk=rid).update(
+            current_stage=2,
+            current_holder=self.treatment,
+            current_department=self.dept2,
+        )
+        self._add_transition(
+            rid,
+            from_stage=1,
+            to_stage=2,
+            from_department=self.dept1,
+            to_department=self.dept2,
+            transitioned_by=self.storeman,
+            transition_type=StageTransition.TransitionType.FORWARD,
+            note="up",
+        )
+        # Treatment returns (no forward made by treatment)
+        self._add_transition(
+            rid,
+            from_stage=2,
+            to_stage=1,
+            from_department=self.dept2,
+            to_department=self.dept1,
+            transitioned_by=self.treatment,
+            transition_type=StageTransition.TransitionType.RETURN,
+            note="fix",
+        )
+        WasteOilRecord.objects.filter(pk=rid).update(
+            current_stage=1,
+            current_holder=self.storeman,
+            current_department=self.dept1,
+        )
+
+        self._login(self.treatment)
+        detail = self.client.get(f"/api/v1/records/{rid}/")
+        self.assertEqual(detail.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_admin_sees_stage_three_even_if_department_stage_mismatched(self):
         mis_admin = CustomUser.objects.create_user(
@@ -329,7 +417,7 @@ class WasteOilRecordAPITests(TestCase):
             role=CustomUser.Role.ADMIN,
             department=self.dept1,
         )
-        v = Vendor.objects.create(name="AtStage3", contact="")
+        v = Vendor.objects.create(name="AtStage3")
         self._login(self.storeman)
         cre = self.client.post(
             "/api/v1/records/",
@@ -346,6 +434,85 @@ class WasteOilRecordAPITests(TestCase):
         detail = self.client.get(f"/api/v1/records/{rid}/")
         self.assertEqual(detail.status_code, status.HTTP_200_OK)
         self.assertEqual(detail.data["vendor_name"], "AtStage3")
+
+    def test_stage_transitions_peer_window_vs_full_for_manager(self):
+        """Peer-tier viewers get at most three transitions; manager sees the full history."""
+        v = Vendor.objects.create(name="MultiHop")
+        self._login(self.storeman)
+        cre = self.client.post(
+            "/api/v1/records/",
+            self._record_payload(vendor_id=str(v.id)),
+            format="json",
+        )
+        rid = cre.data["id"]
+        # Five hops; record ends in dept4 (last forward to stage 4)
+        self._add_transition(
+            rid,
+            from_stage=1,
+            to_stage=2,
+            from_department=self.dept1,
+            to_department=self.dept2,
+            transitioned_by=self.storeman,
+            transition_type=StageTransition.TransitionType.FORWARD,
+            note="a",
+        )
+        self._add_transition(
+            rid,
+            from_stage=2,
+            to_stage=3,
+            from_department=self.dept2,
+            to_department=self.dept3,
+            transitioned_by=self.treatment,
+            transition_type=StageTransition.TransitionType.FORWARD,
+            note="b",
+        )
+        self._add_transition(
+            rid,
+            from_stage=3,
+            to_stage=4,
+            from_department=self.dept3,
+            to_department=self.dept4,
+            transitioned_by=self.admin_u,
+            transition_type=StageTransition.TransitionType.FORWARD,
+            note="c",
+        )
+        self._add_transition(
+            rid,
+            from_stage=4,
+            to_stage=3,
+            from_department=self.dept4,
+            to_department=self.dept3,
+            transitioned_by=self.manager,
+            transition_type=StageTransition.TransitionType.RETURN,
+            note="d",
+        )
+        self._add_transition(
+            rid,
+            from_stage=3,
+            to_stage=4,
+            from_department=self.dept3,
+            to_department=self.dept4,
+            transitioned_by=self.admin_u,
+            transition_type=StageTransition.TransitionType.FORWARD,
+            note="e",
+        )
+        WasteOilRecord.objects.filter(pk=rid).update(
+            current_stage=4,
+            current_holder=self.manager,
+            current_department=self.dept4,
+        )
+
+        self._login(self.storeman)
+        peer = self.client.get(f"/api/v1/records/{rid}/")
+        self.assertEqual(peer.status_code, status.HTTP_200_OK)
+        self.assertEqual(peer.data["stage_transitions_view"], "peer_window")
+        self.assertLessEqual(len(peer.data["stage_transitions"]), 3)
+
+        self._login(self.manager)
+        full = self.client.get(f"/api/v1/records/{rid}/")
+        self.assertEqual(full.status_code, status.HTTP_200_OK)
+        self.assertEqual(full.data["stage_transitions_view"], "full")
+        self.assertEqual(len(full.data["stage_transitions"]), 5)
 
     def test_attachment_requires_holder(self):
         self._login(self.storeman)

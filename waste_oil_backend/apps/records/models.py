@@ -14,8 +14,6 @@ class Vendor(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
-    contact = models.CharField(max_length=200, blank=True)
-    address = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -46,10 +44,16 @@ class WasteOilRecord(models.Model):
     product_description = models.TextField(blank=True)
     product_type = models.CharField(max_length=120)
     unit = models.CharField(max_length=40)
+    packaging = models.CharField(max_length=40, blank=True, default="")
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
     entry_date = models.DateField()
     due_date = models.DateField()
+    driver_name = models.CharField(max_length=120, blank=True, default="")
+    vehicle_details = models.CharField(max_length=160, blank=True, default="")
+    time_in = models.DateTimeField(null=True, blank=True)
+    time_out = models.DateTimeField(null=True, blank=True)
     remarks = models.TextField(blank=True, null=True)
+    photo_path = models.CharField(max_length=500, blank=True, default="")
     attachment_paths = models.JSONField(default=list)
     current_stage = models.IntegerField(
         default=1,
@@ -153,3 +157,29 @@ class WasteOilRecord(models.Model):
         if progress >= yellow_pct:
             return self.AlertLevel.YELLOW
         return self.AlertLevel.GREEN
+
+
+class RecordOption(models.Model):
+    class Category(models.TextChoices):
+        PRODUCT_TYPE = "product_type", "Product Type"
+        UNIT = "unit", "Unit"
+        DRIVER_NAME = "driver_name", "Driver Name"
+        PACKAGING = "packaging", "Packaging"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    category = models.CharField(max_length=40, choices=Category.choices)
+    value = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "record_options"
+        ordering = ["category", "value", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category", "value"], name="uq_record_option_category_value"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.category}: {self.value}"
+

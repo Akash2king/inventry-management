@@ -45,7 +45,7 @@ def send_monthly_gm_report_email():
         return {"sent": False, "reason": "no_recipients"}
 
     subject = (
-        f"[Waste Management] Monthly GM report "
+        f"[Chem-Solv Inventory] Monthly Inventory report "
         f"({report['period']['from']} → {report['period']['to']})"
     )
 
