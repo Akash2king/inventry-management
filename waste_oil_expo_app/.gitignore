@@ -1,0 +1,87 @@
+# ======================
+# Node.js & npm
+# ======================
+node_modules/
+npm-debug.log*
+npm-error.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pnpm-error.log*
+# package-lock.json is committed for reproducible npm ci (GitHub Actions).
+yarn.lock
+pnpm-lock.yaml
+.npm
+.eslintcache
+
+# ======================
+# Build & Output
+# ======================
+dist/
+release/
+build/
+out/
+.next/
+.nuxt/
+coverage/
+*.tsbuildinfo
+
+# ======================
+# Environment Variables
+# ======================
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ======================
+# IDE and Editor
+# ======================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+*.sublime-workspace
+*.iml
+.eclipse
+
+# ======================
+# Logs
+# ======================
+*.log
+logs/
+.log
+
+# ======================
+# Operating System
+# ======================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+eThumbs.db
+Thumbs.db
+desktop.ini
+
+# ======================
+# Temporary Files
+# ======================
+*.bak
+*.tmp
+tmp/
+temp/
+.cache/
+.pytest_cache/
+
+# ======================
+# Expo / React Native
+# ======================
+.expo/
+.expo-shared/
+android/
+ios/

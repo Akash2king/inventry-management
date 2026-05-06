@@ -1,0 +1,52 @@
+{
+  "name": "waste-oil-expo-app",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "description": "Chem-Solv Inventory — native Expo app (REST) + optional Vite web build for browsers",
+  "type": "commonjs",
+  "scripts": {
+    "frontend:dev": "vite",
+    "frontend:build": "vite build",
+    "dev": "concurrently \"npm run frontend:dev -- --host 0.0.0.0 --port 1420\" \"npm run expo:start\"",
+    "build": "vite build",
+    "expo:start": "expo start --clear",
+    "expo:android": "expo run:android",
+    "expo:ios": "expo run:ios",
+    "expo:web": "expo start --web",
+    "expo:prebuild:android": "expo prebuild --platform android --clean",
+    "android:apk:eas": "eas build --platform android --profile preview",
+    "preview": "vite preview --host 127.0.0.1",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/native": "^7.2.2",
+    "@react-navigation/native-stack": "^7.14.12",
+    "expo": "~54.0.34",
+    "expo-build-properties": "~1.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-status-bar": "~3.0.9",
+    "lucide-react": "^1.14.0",
+    "pdf-lib": "^1.17.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-hook-form": "^7.54.2",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-router-dom": "^7.1.1",
+    "recharts": "^2.15.4",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "eas-cli": "^18.11.0",
+    "vite": "^6.0.7"
+  }
+}
