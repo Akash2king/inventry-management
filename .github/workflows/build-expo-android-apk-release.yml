@@ -126,9 +126,14 @@ jobs:
               s = s.replace(old, new, 1)
           
           # 4) Ensure release build uses signingConfigs.release.
+          def repl(m: re.Match[str]) -> str:
+            before = m.group(1)
+            after = m.group(2)
+            return before + "            signingConfig keystorePropertiesLoaded ? signingConfigs.release : signingConfigs.debug" + after
+          
           s = re.sub(
             r"(release\s*\{[\s\S]*?\n)\s*signingConfig\s+signingConfigs\.debug(\s*\n)",
-            r"\\1            signingConfig keystorePropertiesLoaded ? signingConfigs.release : signingConfigs.debug\\2",
+            repl,
             s,
             count=1,
           )
