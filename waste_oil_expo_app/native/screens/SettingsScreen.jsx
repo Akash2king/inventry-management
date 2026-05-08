@@ -10,11 +10,27 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { saveApiBase, suggestLanPlaceholder } from "../apiConfig.js";
 import { useAuth } from "../AuthContext.jsx";
+import { theme } from "../theme.js";
+
+function ActionRow({ icon, label, onPress, danger }) {
+  return (
+    <TouchableOpacity
+      style={[styles.actionRow, danger && { borderColor: "rgba(239,68,68,0.35)" }]}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={18} color={danger ? "#b91c1c" : "#0f172a"} />
+      <Text style={[styles.actionText, danger && { color: "#b91c1c" }]}>{label}</Text>
+      <View style={{ flex: 1 }} />
+      <Ionicons name="chevron-forward" size={18} color={danger ? "rgba(185,28,28,0.6)" : "rgba(15,23,42,0.4)"} />
+    </TouchableOpacity>
+  );
+}
 
 export function SettingsScreen({ navigation }) {
-  const { apiBase, applyApiBase } = useAuth();
+  const { apiBase, applyApiBase, user, logout } = useAuth();
   const [url, setUrl] = useState(apiBase || "");
   const [saving, setSaving] = useState(false);
 
@@ -62,6 +78,55 @@ export function SettingsScreen({ navigation }) {
         >
           <Text style={styles.btnText}>{saving ? "Saving…" : "Save & apply"}</Text>
         </TouchableOpacity>
+
+        {user ? (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.sectionTitle}>Account</Text>
+            <Text style={styles.help}>Signed in as {user.full_name || user.username}</Text>
+
+            <ActionRow
+              icon="key-outline"
+              label="Change password"
+              onPress={() => navigation.navigate("ChangePassword")}
+            />
+
+            {user.role === "manager" || user.role === "gm" || user.role === "superadmin" ? (
+              <ActionRow
+                icon="shield-checkmark-outline"
+                label="Audit logs"
+                onPress={() => navigation.navigate("AuditLogs")}
+              />
+            ) : null}
+
+            {user.role === "gm" || user.role === "superadmin" ? (
+              <ActionRow
+                icon="construct-outline"
+                label="GM console"
+                onPress={() => navigation.navigate("GmConsole")}
+              />
+            ) : null}
+
+            <ActionRow
+              icon="log-out-outline"
+              label="Sign out"
+              danger
+              onPress={() => {
+                Alert.alert("Sign out", "Do you want to sign out?", [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Sign out",
+                    style: "destructive",
+                    onPress: async () => {
+                      await logout().catch(() => {});
+                      navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] });
+                    },
+                  },
+                ]);
+              }}
+            />
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -70,7 +135,7 @@ export function SettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: theme.colors.bg,
   },
   scroll: {
     padding: 16,
@@ -80,18 +145,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#0f172a",
+    color: theme.colors.textBright,
   },
   help: {
     fontSize: 14,
-    color: "#475569",
+    color: theme.colors.text,
     lineHeight: 21,
   },
   mono: {
     fontFamily: "monospace",
     fontSize: 13,
-    color: "#0f766e",
-    backgroundColor: "#ecfdf5",
+    color: theme.colors.accentHover,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     padding: 10,
     borderRadius: 8,
   },
@@ -99,22 +166,22 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     fontWeight: "600",
-    color: "#334155",
+    color: theme.colors.textBright,
   },
   input: {
     marginTop: 6,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: theme.colors.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 14 : 10,
     fontSize: 16,
-    color: "#0f172a",
-    backgroundColor: "#fff",
+    color: theme.colors.textBright,
+    backgroundColor: theme.colors.surface,
   },
   btn: {
     marginTop: 18,
-    backgroundColor: "#15803d",
+    backgroundColor: theme.colors.accentHover,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -127,4 +194,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 16,
   },
+  divider: { height: 1, backgroundColor: theme.colors.border, marginTop: 18, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: "800", color: theme.colors.textBright, marginBottom: 4 },
+  actionRow: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  actionText: { color: theme.colors.textBright, fontWeight: "900", fontSize: 15 },
 });

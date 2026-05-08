@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
+import { theme } from "../theme.js";
 
 export function LoginScreen({ navigation }) {
   const { login, api, apiBase } = useAuth();
@@ -29,7 +30,6 @@ export function LoginScreen({ navigation }) {
     setBusy(true);
     try {
       await login(username.trim(), password);
-      navigation.reset({ index: 0, routes: [{ name: "Records" }] });
     } catch (e) {
       Alert.alert("Login failed", e?.message || "Try again.");
     } finally {
@@ -97,7 +97,7 @@ export function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: theme.colors.bg,
   },
   flex: {
     flex: 1,
@@ -105,63 +105,66 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: theme.colors.border,
   },
   brand: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#0f172a",
+    color: theme.colors.textBright,
   },
   sub: {
     marginTop: 4,
-    color: "#64748b",
+    color: theme.colors.text,
     fontSize: 14,
     marginBottom: 16,
   },
   banner: {
-    backgroundColor: "#fef3c7",
-    borderRadius: 10,
+    backgroundColor: theme.colors.accentMuted,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(22, 163, 74, 0.20)",
     padding: 12,
     marginBottom: 16,
   },
   bannerText: {
-    color: "#92400e",
+    color: theme.colors.textBright,
     fontSize: 14,
   },
   bannerLink: {
     marginTop: 8,
-    color: "#b45309",
-    fontWeight: "700",
+    color: theme.colors.accentHover,
+    fontWeight: "900",
   },
   endpoint: {
     fontSize: 11,
-    color: "#0369a1",
+    color: theme.colors.accentHover,
     marginBottom: 14,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   label: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#334155",
+    fontWeight: "800",
+    color: theme.colors.textBright,
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 14 : 10,
     fontSize: 16,
     marginBottom: 14,
-    color: "#0f172a",
+    color: theme.colors.textBright,
+    backgroundColor: theme.colors.surface,
   },
   primary: {
-    backgroundColor: "#15803d",
-    borderRadius: 10,
+    backgroundColor: theme.colors.accentHover,
+    borderRadius: theme.radius.md,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 4,
@@ -171,7 +174,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: "#fff",
-    fontWeight: "700",
+    fontWeight: "900",
     fontSize: 16,
   },
   secondary: {
@@ -180,8 +183,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   secondaryText: {
-    color: "#15803d",
-    fontWeight: "700",
+    color: theme.colors.accentHover,
+    fontWeight: "900",
     fontSize: 15,
   },
 });

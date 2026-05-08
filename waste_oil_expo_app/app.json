@@ -5,11 +5,21 @@
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
+    "icon": "./src/assets/app-logo.png",
+    "splash": {
+      "image": "./src/assets/app-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f1f4f8"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "android": {
-      "package": "com.chemsolv.inventory"
+      "package": "com.chemsolv.inventory",
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/app-logo.png",
+        "backgroundColor": "#f1f4f8"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.chemsolv.inventory",
@@ -17,7 +27,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true,
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "web": {
@@ -31,7 +42,9 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "eas": {
