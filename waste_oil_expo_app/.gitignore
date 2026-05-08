@@ -85,3 +85,7 @@ temp/
 .expo-shared/
 android/
 ios/
+
+# Never commit signing keys
+*.jks
+*.keystore

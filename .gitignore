@@ -83,6 +83,7 @@ node_modules/
 package-lock.json
 # CI / reproducible installs for the Tauri app (GitHub Actions runs npm ci)
 !waste_oil_desktop-TAURI/package-lock.json
+!waste_oil_expo_app/package-lock.json
 yarn.lock
 pnpm-lock.yaml
 npm-shrinkwrap.json
