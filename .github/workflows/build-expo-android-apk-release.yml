@@ -43,6 +43,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Verify lockfile exists
+        run: |
+          ls -la
+          test -f package-lock.json
+
       - name: Install deps (npm ci)
         run: npm ci
 
