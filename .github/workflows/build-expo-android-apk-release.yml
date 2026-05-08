@@ -1,0 +1,183 @@
+name: Build Expo Android APK (Release)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - "waste_oil_expo_app/**"
+      - ".github/workflows/build-expo-android-apk-release.yml"
+
+concurrency:
+  group: build-expo-android-apk-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: waste_oil_expo_app
+
+    env:
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || 'http://192.168.29.105:8000/api/v1' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: waste_oil_expo_app/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install deps (npm ci)
+        run: npm ci
+
+      - name: Generate Android project (expo prebuild)
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Patch Gradle for CI release signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          from pathlib import Path
+          import re
+          
+          p = Path("android/app/build.gradle")
+          s = p.read_text(encoding="utf-8")
+          
+          # 1) Ensure imports for keystore loading exist.
+          if "import java.util.Properties" not in s:
+            s = "import java.util.Properties\nimport java.io.FileInputStream\n\n" + s
+          
+          # 2) Inject keystore.properties loader right after jscFlavor definition.
+          m = re.search(r"^def jscFlavor = .*$", s, flags=re.M)
+          if "keystorePropertiesFile" not in s:
+            if not m:
+              raise SystemExit("Could not find jscFlavor line in android/app/build.gradle")
+            anchor_line = m.group(0)
+            insert = (
+              anchor_line
+              + "\n\n"
+              + "def keystorePropertiesFile = rootProject.file(\"keystore.properties\")\n"
+              + "def keystoreProperties = new Properties()\n"
+              + "def keystorePropertiesLoaded = false\n"
+              + "if (keystorePropertiesFile.exists()) {\n"
+              + "    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\n"
+              + "    keystorePropertiesLoaded = true\n"
+              + "} else if (\"true\".equalsIgnoreCase(System.getenv(\"CI\"))) {\n"
+              + "    throw new GradleException(\"Missing android/keystore.properties (required for CI release signing).\")\n"
+              + "}\n"
+            )
+            s = s.replace(anchor_line, insert, 1)
+          
+          # 3) Add signingConfigs.release that reads from keystore.properties.
+          if "signingConfigs" in s and "signingConfigs {" in s and "signingConfigs.release" not in s:
+            # Patch the common Expo prebuild signingConfigs.debug-only block.
+            old = (
+              "    signingConfigs {\n"
+              "        debug {\n"
+              "            storeFile file('debug.keystore')\n"
+              "            storePassword 'android'\n"
+              "            keyAlias 'androiddebugkey'\n"
+              "            keyPassword 'android'\n"
+              "        }\n"
+              "    }\n"
+            )
+            if old in s:
+              new = (
+                "    signingConfigs {\n"
+                "        debug {\n"
+                "            storeFile file('debug.keystore')\n"
+                "            storePassword 'android'\n"
+                "            keyAlias 'androiddebugkey'\n"
+                "            keyPassword 'android'\n"
+                "        }\n"
+                "        release {\n"
+                "            if (keystorePropertiesLoaded) {\n"
+                "                storeFile file(keystoreProperties['storeFile'])\n"
+                "                storePassword keystoreProperties['storePassword']\n"
+                "                keyAlias keystoreProperties['keyAlias']\n"
+                "                keyPassword keystoreProperties['keyPassword']\n"
+                "            }\n"
+                "        }\n"
+                "    }\n"
+              )
+              s = s.replace(old, new, 1)
+          
+          # 4) Ensure release build uses signingConfigs.release.
+          s = re.sub(
+            r"(release\s*\{[\s\S]*?\n)\s*signingConfig\s+signingConfigs\.debug(\s*\n)",
+            r"\\1            signingConfig keystorePropertiesLoaded ? signingConfigs.release : signingConfigs.debug\\2",
+            s,
+            count=1,
+          )
+          
+          p.write_text(s, encoding="utf-8")
+          print("Patched", p)
+          PY
+
+      - name: Write Android keystore + signing props
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "Missing secret ANDROID_KEYSTORE_BASE64" >&2
+            exit 1
+          fi
+          mkdir -p android/app
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/app/release.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=app/release.jks
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          EOF
+
+      - name: Build release APK (Gradle)
+        run: |
+          cd android
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Normalize APK name
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME:-manual}"
+          SRC="android/app/build/outputs/apk/release/app-release.apk"
+          DEST="android/app/build/outputs/apk/release/Chem-Solv Inventory-${TAG}.apk"
+          test -f "$SRC"
+          mv "$SRC" "$DEST"
+          printf 'APK_PATH=%s\n' "$DEST" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chem-Solv Inventory-${{ github.ref_name }}-apk
+          path: waste_oil_expo_app/${{ env.APK_PATH }}
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: waste_oil_expo_app/${{ env.APK_PATH }}
