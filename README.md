@@ -1,6 +1,8 @@
 # Chem-Solv Inventory
 
-Internal **waste oil inventory and workflow** application: a **Django REST API** plus a **Tauri + React** desktop client. Records move through a five-stage pipeline (storeman → treatment → admin → manager → GM) with SLA-based alerts, audit logging, and optional email notifications.
+Internal **waste oil inventory and workflow** application: a **Django REST API** with two first-party clients—a **Tauri + React** desktop app and an **Expo (React Native)** mobile app—plus an optional **Vite** bundle in `waste_oil_expo_app` for browser-style testing. Records move through a five-stage pipeline (storeman → treatment → admin → manager → GM) with SLA-based alerts, audit logging, and optional email notifications.
+
+**Current stage:** Backend and Tauri desktop are the primary, feature-complete surfaces used in production-style flows (Windows installer via GitHub Actions). The **Expo** client targets iOS and Android with the same REST API, React Navigation on device, and **EAS / CI** paths for Android APK or app bundle builds; native development assumes the API is reachable on the LAN (or tunneled) with cleartext HTTP allowed for local dev in app config.
 
 This repository contains:
 
@@ -8,10 +10,11 @@ This repository contains:
 |-----------|------|-------|
 | API | `waste_oil_backend/` | Django 5, DRF, SimpleJWT, Celery (optional Redis) |
 | Desktop | `waste_oil_desktop-TAURI/` | React 18, Vite 6, Tauri 2, Zustand, React Router (hash) |
+| Mobile (+ optional web) | `waste_oil_expo_app/` | Expo ~54, React Native 0.81, React 19, Zustand, React Navigation; Vite 6 for optional `src/` web build |
 
 Default database for local development is **SQLite** (`waste_oil_backend/db.sqlite3`). Set `DATABASE_URL` for **PostgreSQL** in production.
 
-> **Note:** The desktop shell in this repo is **Tauri only**. Older docs may mention an Electron app; day-to-day development uses `waste_oil_desktop-TAURI/`.
+> **Note:** The desktop shell in this repo is **Tauri only**. Older docs may mention an Electron app; day-to-day development uses `waste_oil_desktop-TAURI/`. Mobile is **Expo**, not embedded inside Tauri’s WebView (the native app entry is `App.js` → `native/NativeRoot.jsx`).
 
 ---
 
@@ -27,7 +30,7 @@ Default database for local development is **SQLite** (`waste_oil_backend/db.sqli
 - **Dashboard**: **Peer** dashboard (compact) for `storeman`, `treatment`, and `admin`; **Executive** dashboard (analytics-heavy) for `manager`, `gm`, and `superadmin`—selected in `src/pages/Dashboard.jsx`.
 - **GM console**: Departments, pipeline employees CRUD; optional welcome email on create; monthly GM report (API + PDF) via admin-console routes.
 - **Vendors**: Master list; create/update restricted by role.
-- **Audit**: Immutable-style **audit log** API (`/api/v1/audit/logs/`) and desktop **Audit log** page (`#/audit-logs`) for managers and GM.
+- **Audit**: Immutable-style **audit log** API (`/api/v1/audit/logs/`) and **Audit log** UI on desktop (`#/audit-logs`) and in the Expo app for managers and GM.
 - **Admin console**: Analytics summaries; GM monthly report (JSON + PDF); Celery-assisted email/PDF where configured.
 - **Notifications**: Email for workflow events, SLA alerts, monthly reports—gated by `EMAIL_*` and `EMAIL_NOTIFICATIONS_ENABLED`.
 
@@ -58,12 +61,18 @@ inventry-management/
 │       ├── audit/            # Audit log REST API
 │       ├── notifications/
 │       └── admin_console/    # Analytics & GM reports
-└── waste_oil_desktop-TAURI/  # Desktop UI
+├── waste_oil_desktop-TAURI/  # Desktop UI
+│   ├── .env.example
+│   ├── package.json
+│   ├── src/                   # React app (hash router, fetch-based API in platform/)
+│   ├── dist/                  # Vite production output (referenced by Tauri)
+│   └── src-tauri/             # Rust / Tauri shell, Windows icons/bundle (NSIS)
+└── waste_oil_expo_app/        # Mobile (Expo) + optional Vite web (`src/`)
     ├── .env.example
-    ├── package.json
-    ├── src/                   # React app (hash router, fetch-based API in platform/)
-    ├── dist/                  # Vite production output (referenced by Tauri)
-    └── src-tauri/             # Rust / Tauri shell, Windows icons/bundle (NSIS)
+    ├── app.json               # Expo config (Android package, iOS bundle id, cleartext for LAN dev)
+    ├── eas.json               # EAS Build profiles (preview APK, production AAB)
+    ├── native/                # React Navigation screens (primary native shell)
+    └── src/                   # Shared logic + Vite entry for browser builds
 ```
 
 ---
@@ -87,6 +96,14 @@ inventry-management/
 **Linux**: `webkit2gtk`, build tools, etc. (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
 
 **macOS**: Xcode Command Line Tools.
+
+### Mobile (Expo)
+
+- **Node.js 20+** and **npm**
+- **Expo CLI** via `npx expo` (no global install required)
+- **iOS**: Xcode (simulator or device)
+- **Android**: Android Studio / SDK for `expo run:android` and emulator (`10.0.2.2` maps to the host machine)
+- Optional **EAS** account for cloud builds (`eas build`); `eas.json` is already present
 
 ---
 
@@ -176,6 +193,35 @@ Typical artifact:
 
 The Vite config sets **`base: "./"`** so JavaScript/CSS paths resolve when the packaged app loads `index.html` from the filesystem (`file://`). If you fork the project, keep that setting for desktop releases.
 
+### 3. Mobile (Expo)
+
+```bash
+cd waste_oil_expo_app
+npm install
+cp .env.example .env   # Windows: Copy-Item .env.example .env
+```
+
+Set **`EXPO_PUBLIC_API_BASE_URL`** to a URL the phone or emulator can reach (same `/api/v1` prefix as desktop). Examples are in `waste_oil_expo_app/.env.example` (LAN IP, Android emulator `http://10.0.2.2:8000/api/v1`). Ensure Django is listening on `0.0.0.0:8000` when testing from a device. Users can also set the API base URL from **Login → API Settings** on the device (persisted locally).
+
+Start the Metro bundler and pick a target:
+
+```bash
+npm run expo:start
+# or concurrently with optional Vite dev (see package.json "dev")
+npm run dev
+```
+
+Run on a simulator or device:
+
+```bash
+npm run expo:android
+npm run expo:ios
+```
+
+**EAS (cloud):** `npm run android:apk:eas` uses the `preview` profile in `eas.json` (APK, internal distribution). Adjust `EXPO_PUBLIC_API_BASE_URL` in EAS env or in the profile before shipping.
+
+For **browser-only** builds of the `src/` UI, set `VITE_API_BASE_URL` and use `npm run frontend:dev` / `npm run frontend:build` (native shell does not use that Vite server).
+
 ---
 
 ## Desktop client architecture (short)
@@ -186,6 +232,15 @@ The Vite config sets **`base: "./"`** so JavaScript/CSS paths resolve when the p
 | API | Browser-style **`window.api`** object implemented in `src/platform/installBrowserApi.js` using **`fetch`** and `VITE_API_BASE_URL` (no Rust IPC for REST in the default setup). |
 | Auth | Tokens in **`localStorage`** (`wom_access_token`, `wom_refresh_token`), profile cache `wom_user_profile` — see `src/store/authStore.js`. |
 | Plugins | `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs` available for native file flows where used. |
+
+### Expo (mobile) — short
+
+| Topic | Detail |
+|-------|--------|
+| Shell | `App.js` loads **`native/NativeRoot.jsx`** — React Navigation stacks/tabs, not a WebView. |
+| API | Same v1 REST as desktop; base URL from **`EXPO_PUBLIC_*`** at build time or **Login → API Settings** (AsyncStorage). |
+| Auth | Tokens and optional API base URL in **AsyncStorage** (`native/nativeApi.js`, `native/apiConfig.js`, `native/AuthContext.jsx`). |
+| Features | Parity-oriented screens: dashboard, records, queue, workflow timeline, vendors, GM console, audit logs, change password — aligned with backend capabilities. |
 
 ---
 
@@ -215,6 +270,13 @@ Copy from `waste_oil_backend/.env.example`. Important variables:
 
 For a **LAN server**, set `VITE_API_BASE_URL=http://<server-ip>:8000/api/v1` and ensure `ALLOWED_HOSTS` / CORS / firewall allow clients. **Rebuild** the desktop app after changing any `VITE_*` variable so Vite injects the new values.
 
+### Mobile / optional web (`waste_oil_expo_app/.env`)
+
+| Variable | Purpose |
+|----------|---------|
+| `EXPO_PUBLIC_API_BASE_URL` | API v1 prefix for **native** Expo builds and Metro; must be reachable from the device (rebuild or restart after change). |
+| `VITE_API_BASE_URL` | Same shape, for **`npm run frontend:*`** Vite browser builds only. |
+
 ---
 
 ## API authentication (quick reference)
@@ -233,9 +295,9 @@ Clients should send `Authorization: Bearer <access_token>` on protected routes.
 
 ## Dashboard and analytics
 
-The desktop home route combines authenticated **records** and **workflow queue** data with **admin-console analytics** endpoints. Peer roles see a reduced dashboard surface; oversight roles see the full executive view.
+The **desktop** home route combines authenticated **records** and **workflow queue** data with **admin-console analytics** endpoints. Peer roles see a reduced dashboard surface; oversight roles see the full executive view. The **Expo** app consumes the same analytics endpoints on its dashboard screens, scoped by role.
 
-Exports (Excel) are generated in the browser from the current filtered dataset where the UI exposes them.
+Exports (Excel) are generated in the desktop or **Expo** UI from the current filtered dataset where the screen exposes them.
 
 ---
 
@@ -259,6 +321,10 @@ Without Redis, **dev** runs tasks eagerly (no separate worker).
 | Tauri production build + Windows NSIS | `cd waste_oil_desktop-TAURI && npm run build` |
 | Frontend production assets only | `cd waste_oil_desktop-TAURI && npm run frontend:build` |
 | Vite preview (browser) | `cd waste_oil_desktop-TAURI && npm run preview` |
+| Expo Metro (dev) | `cd waste_oil_expo_app && npm run expo:start` |
+| Expo Android / iOS (local compile) | `cd waste_oil_expo_app && npm run expo:android` / `npm run expo:ios` |
+| EAS Android APK (preview profile) | `cd waste_oil_expo_app && npm run android:apk:eas` |
+| Expo app Vite web assets only | `cd waste_oil_expo_app && npm run frontend:build` |
 
 ---
 
@@ -267,6 +333,11 @@ Without Redis, **dev** runs tasks eagerly (no separate worker).
 - **Blank / white window in the installed `.exe`:** Ensure **`VITE_API_BASE_URL`** was set **before** `npm run build`. Confirm `vite.config.js` keeps **`base: "./"`** so assets load under `file://`.
 - **`API setup required` in the Login screen:** Missing or empty `VITE_API_BASE_URL` at build/run time — copy `.env.example` to `.env` and restart dev server or rebuild.
 - **Wrong or missing taskbar icon after an update:** Windows may cache pinned shortcuts — unpin the old shortcut, reinstall from the latest NSIS installer, launch once, pin again.
+
+## Troubleshooting (Expo)
+
+- **Cannot reach API from a physical device:** Use your PC’s LAN IP in `EXPO_PUBLIC_API_BASE_URL` (or **API Settings** on device), run Django with `runserver 0.0.0.0:8000`, and allow the host/port in the OS firewall. `127.0.0.1` on the device points to the device itself, not your PC.
+- **Android emulator:** Use `http://10.0.2.2:8000/api/v1` to reach the host machine’s Django port.
 
 ---
 
@@ -279,13 +350,21 @@ Without Redis, **dev** runs tasks eagerly (no separate worker).
 
 ---
 
-## GitHub Actions (Windows installer)
+## GitHub Actions
 
-On push to **`main`** or **`master`** (when files under `waste_oil_desktop-TAURI/` change), the workflow [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds the **NSIS Windows installer** on **`windows-latest`** and publishes a **GitHub Release** (tag `desktop-build-<run_number>`). A Linux runner cannot produce this Windows installer with the current Tauri/NSIS setup without extra cross-compilation.
+### Windows desktop (NSIS)
+
+On push to **`main`** or **`master`** (when files under `waste_oil_desktop-TAURI/` change), [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds the **NSIS Windows installer** on **`windows-latest`** and publishes a **GitHub Release** (tag `desktop-build-<run_number>`). A Linux runner cannot produce this Windows installer with the current Tauri/NSIS setup without extra cross-compilation.
 
 - **Workflow permissions:** Repository **Settings → Actions → General → Workflow permissions** must allow **Read and write** so releases can be created.
 - **API URL in the installer:** Optional repository variable **`VITE_API_BASE_URL`** (Actions → Variables). If unset, builds use `http://127.0.0.1:8000/api/v1`.
 - **Manual run:** Actions → **Release desktop (Windows)** → **Run workflow**.
+
+### Android APK (Expo / prebuild)
+
+On push of a **`v*`** tag (when `waste_oil_expo_app/` or the workflow file changes), [`.github/workflows/build-expo-android-apk-release.yml`](.github/workflows/build-expo-android-apk-release.yml) runs **`expo prebuild`** for Android and produces a **signed release APK** (requires Android signing secrets configured for that workflow). **`workflow_dispatch`** is also enabled.
+
+- **API URL baked into the APK:** Repository variable **`EXPO_PUBLIC_API_BASE_URL`**; if unset, the workflow falls back to a placeholder LAN URL—set this in GitHub **Settings → Secrets and variables → Actions → Variables** for real devices.
 
 ---
 
