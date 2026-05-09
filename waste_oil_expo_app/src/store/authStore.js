@@ -45,7 +45,16 @@ export const useAuthStore = create((set, get) => ({
   login: async (username, password) => {
     set({ isLoading: true });
     try {
-      const res = await window.api.auth.login({ username, password });
+      const res = await window.api.auth.login({
+        username,
+        password,
+        device_context: {
+          client: "web",
+          device_label: "Chem-Solv web (Vite)",
+          app_version: import.meta.env?.VITE_APP_VERSION || "0.1.0",
+          platform: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        },
+      });
       if (!res.ok) {
         throw new Error(res.error || "Login failed");
       }
@@ -166,3 +175,16 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 }));
+
+if (typeof window !== "undefined") {
+  window.addEventListener("wom:tokens-refreshed", () => {
+    try {
+      useAuthStore.setState({
+        accessToken: localStorage.getItem(LS_ACCESS),
+        refreshToken: localStorage.getItem(LS_REFRESH),
+      });
+    } catch {
+      /* ignore */
+    }
+  });
+}

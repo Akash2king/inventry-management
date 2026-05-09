@@ -4,6 +4,7 @@ import { humanizeApiErrorBody } from "../src/utils/apiErrors.js";
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
 const LS_USER = "wom_user_profile";
+const LS_SESSION = "wom_session_id";
 
 const API_TIMEOUT_MS = 12000;
 
@@ -76,14 +77,54 @@ export function createNativeApi(rawBaseUrl) {
     if (data?.user) {
       await AsyncStorage.setItem(LS_USER, JSON.stringify(data.user));
     }
+    if (data?.session?.id) {
+      await AsyncStorage.setItem(LS_SESSION, String(data.session.id));
+    } else {
+      await AsyncStorage.removeItem(LS_SESSION);
+    }
   }
 
   async function clearTokens() {
-    await AsyncStorage.multiRemove([LS_ACCESS, LS_REFRESH, LS_USER]);
+    await AsyncStorage.multiRemove([LS_ACCESS, LS_REFRESH, LS_USER, LS_SESSION]);
+  }
+
+  async function tryRefreshAccess() {
+    const refresh = (await AsyncStorage.getItem(LS_REFRESH)) || "";
+    if (!refresh) {
+      return false;
+    }
+    const url = `${base}/auth/refresh/`;
+    let res;
+    try {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refresh }),
+      });
+    } catch {
+      return false;
+    }
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+    }
+    if (!res.ok || !data?.access_token) {
+      return false;
+    }
+    await AsyncStorage.setItem(LS_ACCESS, data.access_token);
+    if (data.refresh_token) {
+      await AsyncStorage.setItem(LS_REFRESH, data.refresh_token);
+    }
+    return true;
   }
 
   async function request(method, path, options = {}) {
-    const { body, json, token, skipAuth, headers: extra = {} } = options;
+    const { body, json, token, skipAuth, headers: extra = {}, _didRefresh } = options;
     const url = `${base}/${path.replace(/^\//, "")}`;
     const headers = { ...extra };
 
@@ -95,6 +136,10 @@ export function createNativeApi(rawBaseUrl) {
           : await getAccessToken();
       if (authToken) {
         headers.Authorization = `Bearer ${authToken}`;
+      }
+      const sid = await AsyncStorage.getItem(LS_SESSION);
+      if (sid) {
+        headers["X-Session-Id"] = sid;
       }
     }
 
@@ -138,6 +183,22 @@ export function createNativeApi(rawBaseUrl) {
     }
 
     if (res.status === 401) {
+      const p = path.replace(/^\//, "");
+      const canTryRefresh =
+        !skipAuth &&
+        authToken &&
+        !_didRefresh &&
+        !p.startsWith("auth/login") &&
+        !p.startsWith("auth/refresh") &&
+        !p.startsWith("auth/logout");
+      if (canTryRefresh) {
+        const refreshed = await tryRefreshAccess();
+        if (refreshed) {
+          const retryOpts = { ...options, _didRefresh: true };
+          delete retryOpts.token;
+          return request(method, path, retryOpts);
+        }
+      }
       if (!skipAuth && authToken) {
         await clearTokens();
       }
@@ -173,6 +234,10 @@ export function createNativeApi(rawBaseUrl) {
           : await getAccessToken();
       if (authToken) {
         headers.Authorization = `Bearer ${authToken}`;
+      }
+      const sidBin = await AsyncStorage.getItem(LS_SESSION);
+      if (sidBin) {
+        headers["X-Session-Id"] = sidBin;
       }
     }
 
@@ -273,6 +338,13 @@ export function createNativeApi(rawBaseUrl) {
           },
           token: tokenArg,
         }),
+      listSessions: async (params = {}, tokenArg) => {
+        const p = new URLSearchParams();
+        p.set("active", params.active === false ? "0" : "1");
+        return request("GET", `auth/sessions/?${p.toString()}`, { token: tokenArg });
+      },
+      revokeSession: async (id, tokenArg) =>
+        request("DELETE", `auth/sessions/${id}/`, { token: tokenArg }),
     },
     vendors: {
       list: async (tokenArg) =>
@@ -354,6 +426,38 @@ export function createNativeApi(rawBaseUrl) {
         const qs = buildQuery(filters || {});
         return request("GET", `audit/logs/${qs}`, { token: tokenArg });
       },
+    },
+    adminConsole: {
+      analyticsSummary: (tokenArg) =>
+        request("GET", "admin-console/analytics/summary/", { token: tokenArg }),
+      analyticsRecordsByStage: (tokenArg) =>
+        request("GET", "admin-console/analytics/records/by-stage/", { token: tokenArg }),
+      analyticsRecordsByAlert: (tokenArg) =>
+        request("GET", "admin-console/analytics/records/by-alert/", { token: tokenArg }),
+    },
+    notifications: {
+      list: async (params = {}, tokenArg) => {
+        const p = new URLSearchParams();
+        if (params.unread) {
+          p.set("unread", "1");
+        }
+        if (params.page != null && params.page !== "") {
+          p.set("page", String(params.page));
+        }
+        if (params.page_size != null && params.page_size !== "") {
+          p.set("page_size", String(params.page_size));
+        }
+        const q = p.toString();
+        return request("GET", q ? `notifications/?${q}` : "notifications/", {
+          token: tokenArg,
+        });
+      },
+      unreadCount: async (tokenArg) =>
+        request("GET", "notifications/unread-count/", { token: tokenArg }),
+      markRead: async (id, tokenArg) =>
+        request("POST", `notifications/${id}/read/`, { token: tokenArg }),
+      markAllRead: async (tokenArg) =>
+        request("POST", "notifications/mark-all-read/", { token: tokenArg }),
     },
     gm: {
       getDepartments: async (tokenArg) => request("GET", "gm/departments/", { token: tokenArg }),

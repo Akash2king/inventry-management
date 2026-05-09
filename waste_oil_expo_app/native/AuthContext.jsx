@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
+import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
 
@@ -89,7 +90,17 @@ export function AuthProvider({ children }) {
         throw new Error("Set API base URL first.");
       }
       setError("");
-      const res = await api.auth.login({ username, password });
+      const res = await api.auth.login({
+        username,
+        password,
+        device_context: {
+          client: "expo",
+          device_label: Constants.deviceName || `${Platform.OS} device`,
+          app_version:
+            Constants.expoConfig?.version || String(Constants.nativeAppVersion || "") || "1.0.0",
+          platform: `${Platform.OS} ${String(Platform.Version ?? "")}`,
+        },
+      });
       if (!res.ok) {
         throw new Error(res.error || "Login failed");
       }

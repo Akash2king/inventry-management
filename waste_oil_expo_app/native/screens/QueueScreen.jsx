@@ -13,6 +13,18 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../AuthContext.jsx";
 import { STAGE_LABELS } from "../../src/utils/stageLabels.js";
 import { canActForward, canActReturn, stageForRole } from "../../src/utils/permissions.js";
+import { theme } from "../theme.js";
+import { Card, IconButton, SectionHeader } from "../components/ui/index.js";
+import { formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
+
+const QUEUE_COPY = {
+  storeman: { title: "Stock Entry Queue", forward: "Forward", return: "Return" },
+  treatment: { title: "Treatment Verification Queue", forward: "Verify & Forward", return: "Return to Store Man" },
+  admin: { title: "Admin Validation Queue", forward: "Validate & Forward", return: "Return to Treatment" },
+  manager: { title: "Manager Approval Queue", forward: "Approve to GM", return: "Return to Admin" },
+  gm: { title: "Final Approval Queue", forward: "Final Approve", return: "Return to Manager" },
+  superadmin: { title: "Final Approval Queue", forward: "Final Approve", return: "Return to Manager" },
+};
 
 export function QueueScreen({ navigation }) {
   const { api, user } = useAuth();
@@ -21,6 +33,7 @@ export function QueueScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  const copy = QUEUE_COPY[user?.role] || { title: "My queue", forward: "Forward", return: "Return" };
   const stage = stageForRole(user?.role);
   const stageLabel = useMemo(() => {
     if (!stage || stage < 1) return "";
@@ -64,28 +77,31 @@ export function QueueScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top","bottom"]}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>My queue</Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {user?.full_name || user?.username || "—"}
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate("RecordsTab")}>
-          <Text style={styles.headerBtnText}>Records</Text>
-        </TouchableOpacity>
-      </View>
+      <SectionHeader
+        title={copy.title}
+        right={
+          <IconButton
+            icon="document-text-outline"
+            label="Records"
+            onPress={() => navigation.navigate("RecordsTab")}
+          />
+        }
+      />
       {stage ? (
-        <View style={styles.banner}>
+        <View style={styles.bannerWrap}>
+          <Card variant="muted" style={styles.banner}>
           <Text style={styles.bannerText}>
             Your queue shows records at stage {stage} — {stageLabel}.
           </Text>
           <Text style={styles.bannerSub}>This screen refreshes every 20 seconds while you stay here.</Text>
+          </Card>
         </View>
       ) : (
-        <View style={[styles.banner, styles.bannerMuted]}>
-          <Text style={styles.bannerText}>No pipeline stage assigned to your account.</Text>
-          <Text style={styles.bannerSub}>Ask GM to link you to a department.</Text>
+        <View style={styles.bannerWrap}>
+          <Card variant="muted" style={styles.banner}>
+            <Text style={styles.bannerText}>No pipeline stage assigned to your account.</Text>
+            <Text style={styles.bannerSub}>Ask GM to link you to a department.</Text>
+          </Card>
         </View>
       )}
       {loading ? (
@@ -116,14 +132,31 @@ export function QueueScreen({ navigation }) {
                 }
               >
                 <Text style={styles.rowTitle}>{item.record_number}</Text>
+                {item.needs_workflow_correction && item.pending_return_feedback ? (
+                  <View style={styles.notice}>
+                    <Text style={styles.noticeTitle}>Fix requested</Text>
+                    <Text style={styles.noticeText} numberOfLines={3}>
+                      {String(item.pending_return_feedback)}
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={styles.rowSub} numberOfLines={2}>
                   {(item.vendor_name || "—") +
                     ` · Stage ${item.current_stage}` +
                     (item.current_department_name ? ` · ${item.current_department_name}` : "")}
                 </Text>
+                <Text style={styles.rowMeta} numberOfLines={2}>
+                  {formatQty(item.quantity, item.unit)} / Entry {formatDate(item.entry_date)}
+                  {slaTotalDays(item.entry_date, item.due_date) != null
+                    ? ` / SLA ${slaTotalDays(item.entry_date, item.due_date)}d`
+                    : ""}
+                </Text>
                 <View style={styles.badges}>
                   <Text style={[styles.badge, styles.badgeNeutral]}>
-                    {(item.alert_level || "green").toString().toUpperCase()}
+                    {(item.computed_alert_level || item.alert_level || "green").toString().toUpperCase()}
+                  </Text>
+                  <Text style={[styles.badge, styles.badgeNeutral]}>
+                    Due {formatDate(item.due_date)}
                   </Text>
                   {item.is_locked ? (
                     <Text style={[styles.badge, styles.badgeDone]}>LOCKED</Text>
@@ -144,7 +177,7 @@ export function QueueScreen({ navigation }) {
                         })
                       }
                     >
-                      <Text style={styles.quickPrimaryText}>Forward</Text>
+                      <Text style={styles.quickPrimaryText}>{copy.forward}</Text>
                     </TouchableOpacity>
                   ) : null}
                   {canActReturn(item, user) ? (
@@ -158,7 +191,7 @@ export function QueueScreen({ navigation }) {
                         })
                       }
                     >
-                      <Text style={styles.quickPrimaryText}>Return</Text>
+                      <Text style={styles.quickPrimaryText}>{copy.return}</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -178,60 +211,41 @@ export function QueueScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f8fafc" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    backgroundColor: "#fff",
-    gap: 8,
-  },
-  headerTitle: { fontSize: 20, fontWeight: "900", color: "#0f172a" },
-  meta: { fontSize: 12, color: "#64748b" },
-  headerBtn: {
-    backgroundColor: "#dcfce7",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  headerBtnText: { color: "#166534", fontWeight: "900", fontSize: 12 },
-  banner: {
-    margin: 12,
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#fff",
-    gap: 4,
-  },
-  bannerMuted: {
-    backgroundColor: "rgba(254, 243, 199, 0.7)",
-    borderColor: "rgba(180, 120, 0, 0.25)",
-  },
-  bannerText: { color: "#0f172a", fontWeight: "900", fontSize: 13 },
-  bannerSub: { color: "#64748b", fontWeight: "700", fontSize: 12 },
+  safe: { flex: 1, backgroundColor: theme.colors.bg },
+  bannerWrap: { paddingHorizontal: theme.space.md, paddingTop: 2, paddingBottom: theme.space.sm },
+  banner: { padding: theme.space.md },
+  bannerText: { color: theme.colors.textBright, fontWeight: "900", fontSize: 13 },
+  bannerSub: { color: theme.colors.text, fontWeight: "700", fontSize: 12, marginTop: 4 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   listPad: { paddingVertical: 8 },
   emptyWrap: { flexGrow: 1, justifyContent: "center", padding: 24 },
   row: {
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.surfaceStrong,
     marginHorizontal: 12,
     marginVertical: 5,
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
   },
   rowTitle: {
     fontSize: 16,
     fontWeight: "900",
-    color: "#0f172a",
+    color: theme.colors.textBright,
   },
-  rowSub: { marginTop: 4, fontSize: 13, color: "#64748b", lineHeight: 18 },
+  rowSub: { marginTop: 4, fontSize: 13, color: theme.colors.text, lineHeight: 18 },
+  rowMeta: { marginTop: 6, fontSize: 12, color: theme.colors.text, lineHeight: 17, fontWeight: "700" },
+  notice: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(201, 162, 39, 0.45)",
+    backgroundColor: "rgba(255, 232, 160, 0.35)",
+    borderRadius: 10,
+    padding: 10,
+    gap: 4,
+  },
+  noticeTitle: { fontSize: 12, fontWeight: "900", color: "#92400e" },
+  noticeText: { fontSize: 12, color: "#92400e", fontWeight: "700", lineHeight: 16 },
   badges: { flexDirection: "row", gap: 8, marginTop: 10, flexWrap: "wrap" },
   badge: {
     paddingVertical: 4,

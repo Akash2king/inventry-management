@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
 import { theme } from "../theme.js";
+import { Card } from "../components/ui/index.js";
 
 export function LoginScreen({ navigation }) {
   const { login, api, apiBase } = useAuth();
@@ -43,7 +44,7 @@ export function LoginScreen({ navigation }) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.card}>
+        <Card style={styles.card} variant="strong">
           <Text style={styles.brand}>Chem-Solv Inventory</Text>
           <Text style={styles.sub}>Native • same network as backend</Text>
           {!apiBase ? (
@@ -88,7 +89,7 @@ export function LoginScreen({ navigation }) {
           >
             <Text style={styles.secondaryText}>API Settings</Text>
           </TouchableOpacity>
-        </View>
+        </Card>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -105,11 +106,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    padding: theme.space.xl,
   },
   brand: {
     fontSize: 22,
@@ -126,7 +123,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accentMuted,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "rgba(22, 163, 74, 0.20)",
+    borderColor: "rgba(15, 118, 110, 0.22)",
     padding: 12,
     marginBottom: 16,
   },

@@ -4,4 +4,20 @@ from . import views
 
 urlpatterns = [
     path("health/", views.health, name="notifications-health"),
+    path(
+        "unread-count/",
+        views.user_notification_unread_count,
+        name="user-notifications-unread-count",
+    ),
+    path(
+        "mark-all-read/",
+        views.user_notification_mark_all_read,
+        name="user-notifications-mark-all-read",
+    ),
+    path(
+        "<uuid:pk>/read/",
+        views.UserNotificationMarkReadView.as_view(),
+        name="user-notification-mark-read",
+    ),
+    path("", views.UserNotificationListView.as_view(), name="user-notifications-list"),
 ]

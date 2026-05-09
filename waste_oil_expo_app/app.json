@@ -28,7 +28,8 @@
           "NSAllowsLocalNetworking": true,
           "NSAllowsArbitraryLoads": true
         },
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationsUsageDescription": "Chem-Solv Inventory shows workflow updates (records, SLA, sign-in notices) in your notification center."
       }
     },
     "web": {
@@ -44,6 +45,7 @@
         }
       ],
       "expo-font",
+      "expo-notifications",
       "@react-native-community/datetimepicker"
     ],
     "extra": {

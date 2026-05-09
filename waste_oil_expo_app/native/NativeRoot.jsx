@@ -2,9 +2,10 @@ import React from "react";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { AuthProvider, AuthGate, useAuth } from "./AuthContext.jsx";
+import { WorkflowSystemNotificationBridge } from "./WorkflowSystemNotificationBridge.jsx";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "./theme.js";
 import { LoginScreen } from "./screens/LoginScreen.jsx";
@@ -19,6 +20,8 @@ import { WorkflowTimelineScreen } from "./screens/WorkflowTimelineScreen.jsx";
 import { ChangePasswordScreen } from "./screens/ChangePasswordScreen.jsx";
 import { AuditLogsScreen } from "./screens/AuditLogsScreen.jsx";
 import { GmConsoleScreen } from "./screens/GmConsoleScreen.jsx";
+import { SessionsScreen } from "./screens/SessionsScreen.jsx";
+import { InAppNotificationsScreen } from "./screens/InAppNotificationsScreen.jsx";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -35,12 +38,33 @@ const NavTheme = {
 
 function MainTabs() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const mustChange = Boolean(user?.must_change_password);
+  const bottomPad = Math.max(insets.bottom, 14);
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: theme.colors.surface },
+        tabBarStyle: {
+          backgroundColor: theme.colors.surfaceStrong,
+          borderTopColor: theme.colors.border,
+          borderTopWidth: 1,
+          height: 58 + bottomPad,
+          paddingTop: 7,
+          paddingBottom: bottomPad,
+          elevation: 12,
+          shadowColor: "#0f172a",
+          shadowOpacity: 0.08,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -4 },
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "800",
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
+        },
         tabBarActiveTintColor: theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.text,
       }}
@@ -111,7 +135,9 @@ function AppStack() {
     <Stack.Navigator
       key={isAuthenticated ? "signed-in" : "signed-out"}
       screenOptions={{
-        headerStyle: { backgroundColor: "#ffffff" },
+        headerStyle: { backgroundColor: theme.colors.surfaceStrong },
+        headerTintColor: theme.colors.textBright,
+        headerTitleStyle: { fontWeight: "800" },
         headerShadowVisible: false,
       }}
     >
@@ -135,6 +161,16 @@ function AppStack() {
                 options={{ title: "Change password", headerBackVisible: false }}
               />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+              <Stack.Screen
+                name="Sessions"
+                component={SessionsScreen}
+                options={{ title: "Devices" }}
+              />
+              <Stack.Screen
+                name="InAppNotifications"
+                component={InAppNotificationsScreen}
+                options={{ title: "Workflow notifications" }}
+              />
             </>
           ) : (
             <>
@@ -153,6 +189,16 @@ function AppStack() {
                 name="GmConsole"
                 component={GmConsoleScreen}
                 options={{ title: "GM console" }}
+              />
+              <Stack.Screen
+                name="Sessions"
+                component={SessionsScreen}
+                options={{ title: "Devices" }}
+              />
+              <Stack.Screen
+                name="InAppNotifications"
+                component={InAppNotificationsScreen}
+                options={{ title: "Workflow notifications" }}
               />
             </>
           )}
@@ -201,6 +247,7 @@ export default function NativeRoot() {
     <SafeAreaProvider>
       <AuthProvider>
         <AuthGate>
+          <WorkflowSystemNotificationBridge />
           <Inner />
         </AuthGate>
       </AuthProvider>

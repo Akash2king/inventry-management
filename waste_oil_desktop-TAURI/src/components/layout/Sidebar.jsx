@@ -48,6 +48,12 @@ export function Sidebar() {
             GM console
           </NavLink>
         ) : null}
+        <NavLink to="/sessions" className={navClass}>
+          Devices
+        </NavLink>
+        <NavLink to="/notifications" className={navClass}>
+          Workflow notifications
+        </NavLink>
       </nav>
       <div className="sidebar-footer">
         <div style={{ fontWeight: 600, color: "var(--clr-text-bright)" }}>

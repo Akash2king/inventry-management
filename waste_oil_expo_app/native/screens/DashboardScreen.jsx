@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -14,16 +15,15 @@ import { useAuth } from "../AuthContext.jsx";
 import { STAGE_LABELS } from "../../src/utils/stageLabels.js";
 import { stageForRole } from "../../src/utils/permissions.js";
 import { Ionicons } from "@expo/vector-icons";
+import { theme } from "../theme.js";
+import { Badge, Card, SegmentedControl, SectionHeader, StatCard } from "../components/ui/index.js";
+import appLogo from "../../src/assets/app-logo.png";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 
 function isPeerRole(role) {
   return role === "storeman" || role === "treatment" || role === "admin";
-}
-
-function kpi(label, value) {
-  return { label, value: String(value ?? "—") };
 }
 
 function alertLevelOf(r) {
@@ -72,11 +72,20 @@ export function DashboardScreen({ navigation }) {
   const [records, setRecords] = useState([]);
   const [exportBusy, setExportBusy] = useState(false);
 
+  const role = user?.role || "";
+  const peer = isPeerRole(role);
+  const myStage = stageForRole(role);
+
   const load = useCallback(async () => {
     if (!api) return;
+    const recordFilters = {
+      page_size: 120,
+      ...(peer ? { exclude_completed: true } : {}),
+      ...(peer && myStage != null ? { stage: myStage } : {}),
+    };
     const [q, r] = await Promise.all([
       api.workflow.getQueue(),
-      api.records.getAll({ page_size: 120 }),
+      api.records.getAll(recordFilters),
     ]);
     if (q.ok && Array.isArray(q.data)) setQueue(q.data);
     else setQueue([]);
@@ -88,7 +97,7 @@ export function DashboardScreen({ navigation }) {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [api]);
+  }, [api, peer, myStage]);
 
   useEffect(() => {
     load();
@@ -99,10 +108,6 @@ export function DashboardScreen({ navigation }) {
     await refreshUser();
     await load();
   };
-
-  const role = user?.role || "";
-  const peer = isPeerRole(role);
-  const myStage = stageForRole(role);
 
   const active = useMemo(
     () => records.filter((r) => alertLevelOf(r) !== "completed"),
@@ -320,6 +325,14 @@ export function DashboardScreen({ navigation }) {
     ];
   }, [peer, queue.length, atMyStageOpen.length, dueSoon.length, overdue.length, active.length, completionRate, records.length]);
 
+  const kpiRows = useMemo(() => {
+    const rows = [];
+    for (let i = 0; i < kpiCards.length; i += 2) {
+      rows.push([kpiCards[i], kpiCards[i + 1] || null]);
+    }
+    return rows;
+  }, [kpiCards]);
+
   const baseList = peer ? atMyStageOpen : active;
   const listData = useMemo(() => {
     if (slice === "dueSoon") return dueSoon.slice(0, 20);
@@ -328,7 +341,7 @@ export function DashboardScreen({ navigation }) {
     if (slice === "completed") return completed.slice(0, 20);
     if (slice === "loaded") return records.slice(0, 20);
     return baseList.slice(0, 20);
-  }, [slice, dueSoon, overdue, queue, completed, baseList]);
+  }, [slice, dueSoon, overdue, queue, completed, records, baseList]);
 
   if (loading) {
     return (
@@ -347,254 +360,287 @@ export function DashboardScreen({ navigation }) {
         ListHeaderComponent={
           <View>
             <View style={styles.headerWrap}>
-              <View style={styles.headerCard}>
-                <View style={styles.headerTop}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.title}>Dashboard</Text>
-                    <Text style={styles.meta} numberOfLines={1}>
-                      Hello {user?.full_name || user?.username || "there"}
-                    </Text>
-                    <View style={styles.roleRow}>
-                      <View style={styles.roleChip}>
-                        <Text style={styles.roleChipText}>{(user?.role || "user").toString().toUpperCase()}</Text>
-                      </View>
-                      {peer && myStage ? (
-                        <View style={[styles.roleChip, styles.roleChipAlt]}>
-                          <Text style={styles.roleChipText}>{`S${myStage}`}</Text>
-                        </View>
-                      ) : null}
+              <Card style={styles.headerCard} padded={false}>
+                <View style={styles.headerInner}>
+                  <View style={styles.heroRow}>
+                    <View style={styles.brandMark}>
+                      <Image source={appLogo} style={styles.brandLogo} resizeMode="cover" />
                     </View>
-                  </View>
-                  <View style={styles.quickActions}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate("QueueTab")}>
-                      <Ionicons name="list-outline" size={18} color="#0f172a" />
-                      <Text style={styles.iconBtnText}>Queue</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate("RecordsTab")}>
-                      <Ionicons name="document-text-outline" size={18} color="#0f172a" />
-                      <Text style={styles.iconBtnText}>Records</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate("SettingsTab")}>
-                      <Ionicons name="settings-outline" size={18} color="#0f172a" />
-                      <Text style={styles.iconBtnText}>Settings</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.segment}>
-                  <TouchableOpacity
-                    style={[styles.segmentBtn, view === "overview" && styles.segmentBtnOn]}
-                    onPress={() => setView("overview")}
-                  >
-                    <Text style={[styles.segmentText, view === "overview" && styles.segmentTextOn]}>Overview</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.segmentBtn, view === "analytics" && styles.segmentBtnOn]}
-                    onPress={() => setView("analytics")}
-                  >
-                    <Text style={[styles.segmentText, view === "analytics" && styles.segmentTextOn]}>Analytics</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.kpiRow}>
-              {kpiCards.map((x) => {
-                const selected = slice === x.slice;
-                return (
-                  <TouchableOpacity
-                    key={x.id}
-                    style={[styles.kpiCard, selected && styles.kpiCardOn]}
-                    onPress={() => setSlice(x.slice)}
-                  >
-                    <View style={styles.kpiTop}>
-                      <View style={[styles.kpiIconWrap, selected && styles.kpiIconWrapOn]}>
-                        <Ionicons name={x.icon} size={16} color={selected ? "#fff" : "#0f172a"} />
-                      </View>
-                      <Text style={[styles.kpiLabel, selected && styles.kpiLabelOn]} numberOfLines={1}>
-                        {x.label}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.brandName} numberOfLines={1}>
+                        Chem-Solv
+                      </Text>
+                      <Text style={styles.brandSub} numberOfLines={1}>
+                        INVENTORY
                       </Text>
                     </View>
-                    <Text style={[styles.kpiValue, selected && styles.kpiValueOn]}>{x.value}</Text>
-                    {selected ? (
-                      <View style={styles.kpiSelectedPill}>
-                        <Text style={styles.kpiSelectedPillText}>Showing</Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>{view === "overview" ? listTitle : "At-a-glance analytics"}</Text>
-              <View style={styles.sectionActions}>
-                {view === "overview" ? (
-                  <TouchableOpacity onPress={() => setSlice("default")} style={styles.linkBtn}>
-                    <Text style={styles.link}>Reset slice</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {canExport ? (
-                  <TouchableOpacity
-                    onPress={() => void exportDueSoon()}
-                    style={styles.linkBtn}
-                    disabled={exportBusy}
-                  >
-                    <Text style={styles.link}>{exportBusy ? "Exporting…" : "Export due soon"}</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {canExport ? (
-                  <TouchableOpacity
-                    onPress={() => void exportTopVendors()}
-                    style={styles.linkBtn}
-                    disabled={exportBusy}
-                  >
-                    <Text style={styles.link}>{exportBusy ? "Exporting…" : "Export top vendors"}</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity onPress={() => navigation.navigate("RecordsTab")} style={styles.linkBtn}>
-                  <Text style={styles.link}>Open records</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {view === "analytics" ? (
-              <View style={styles.analyticsCard}>
-                <View style={styles.analyticsTitleRow}>
-                  <Ionicons name="analytics-outline" size={16} color="#0f172a" />
-                  <Text style={styles.analyticsTitle}>Analytics</Text>
-                  <View style={{ flex: 1 }} />
-                  <View style={styles.analyticsPill}>
-                    <Text style={styles.analyticsPillText}>{`Loaded ${records.length}`}</Text>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("InAppNotifications")}
+                      style={styles.brandIconBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Workflow notifications"
+                      hitSlop={10}
+                    >
+                      <Ionicons name="notifications-outline" size={18} color={theme.colors.textBright} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("SettingsTab")}
+                      style={styles.brandAvatar}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open Settings"
+                      hitSlop={10}
+                    >
+                      <Text style={styles.brandAvatarText}>
+                        {(user?.full_name || user?.username || "U").slice(0, 2).toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                </View>
 
-                <Text style={styles.analyticsSub}>Alert mix (active)</Text>
-                {Object.entries(alertCounts).map(([k, v]) => {
-                  const total = Math.max(1, active.length);
-                  const pct = Math.round((v / total) * 100);
-                  const color =
-                    k === "red"
-                      ? "#ef4444"
-                      : k === "orange"
-                        ? "#f97316"
-                        : k === "yellow"
-                          ? "#eab308"
-                          : "#22c55e";
-                  return (
-                    <View key={k} style={styles.alertRow}>
-                      <Text style={styles.alertKey}>{k.toUpperCase()}</Text>
-                      <View style={styles.alertBarTrack}>
-                        <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: color }]} />
+                  <View style={styles.heroDivider} />
+
+                  <View style={styles.headerTop}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.title}>Dashboard</Text>
+                      <Text style={styles.meta} numberOfLines={1}>
+                        Hello {user?.full_name || user?.username || "there"}
+                      </Text>
+                      <View style={styles.roleRow}>
+                        <Badge variant="accent">{(user?.role || "user").toString().toUpperCase()}</Badge>
+                        {peer && myStage ? <Badge variant="neutral">{`S${myStage}`}</Badge> : null}
                       </View>
-                      <Text style={styles.alertVal}>{v}</Text>
                     </View>
-                  );
-                })}
+                  </View>
 
-                <View style={styles.divider} />
-
-                <Text style={styles.analyticsSub}>Stage distribution (active)</Text>
-                {stageCounts.map((v, idx) => {
-                  const total = Math.max(1, active.length);
-                  const pct = Math.round((v / total) * 100);
-                  const label = STAGE_LABELS[idx] || `Stage ${idx + 1}`;
-                  return (
-                    <View key={label} style={styles.alertRow}>
-                      <Text style={styles.alertKey}>{`S${idx + 1}`}</Text>
-                      <View style={styles.alertBarTrack}>
-                        <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: "#38bdf8" }]} />
-                      </View>
-                      <Text style={styles.alertVal}>{v}</Text>
+                  <View style={styles.statusStrip}>
+                    <View style={styles.statusItem}>
+                      <Text style={styles.statusValue}>{active.length}</Text>
+                      <Text style={styles.statusLabel}>Active</Text>
                     </View>
-                  );
-                })}
-
-                <View style={styles.divider} />
-
-                <Text style={styles.analyticsSub}>Entry trend (last 14 days)</Text>
-                <View style={styles.trendRow}>
-                  {entryTrend.rows.map((r) => (
-                    <View key={r.day} style={styles.trendCol}>
-                      <View
-                        style={[
-                          styles.trendBar,
-                          { height: Math.max(3, Math.round((r.count / entryTrend.max) * 36)) },
-                        ]}
-                      />
-                      <Text style={styles.trendLabel}>{r.day}</Text>
+                    <View style={styles.statusDivider} />
+                    <View style={styles.statusItem}>
+                      <Text style={styles.statusValue}>{dueSoon.length}</Text>
+                      <Text style={styles.statusLabel}>Due soon</Text>
                     </View>
-                  ))}
+                    <View style={styles.statusDivider} />
+                    <View style={styles.statusItem}>
+                      <Text style={[styles.statusValue, overdue.length ? styles.statusDanger : null]}>
+                        {overdue.length}
+                      </Text>
+                      <Text style={styles.statusLabel}>Overdue</Text>
+                    </View>
+                  </View>
+
+                  <SegmentedControl
+                    value={view}
+                    options={[
+                      { value: "overview", label: "Overview" },
+                      { value: "analytics", label: "Analytics" },
+                    ]}
+                    onChange={setView}
+                  />
                 </View>
+              </Card>
+            </View>
 
-                <View style={styles.divider} />
+            <View style={styles.kpiGrid}>
+              {kpiRows.map(([a, b]) => (
+                <View key={a.id} style={styles.kpiRowLine}>
+                  <StatCard
+                    icon={a.icon}
+                    label={a.label}
+                    value={a.value}
+                    selected={slice === a.slice}
+                    onPress={() => setSlice(a.slice)}
+                    style={styles.kpiCard}
+                  />
+                  {b ? (
+                    <StatCard
+                      icon={b.icon}
+                      label={b.label}
+                      value={b.value}
+                      selected={slice === b.slice}
+                      onPress={() => setSlice(b.slice)}
+                      style={styles.kpiCard}
+                    />
+                  ) : (
+                    <View style={styles.kpiCardPlaceholder} pointerEvents="none" />
+                  )}
+                </View>
+              ))}
+            </View>
 
-                <Text style={styles.analyticsSub}>Top vendors by volume (active)</Text>
-                {topVendors.length ? (
-                  topVendors.map((v) => {
-                    const max = Math.max(1, ...topVendors.map((x) => x.qty));
-                    const pct = Math.round((v.qty / max) * 100);
+            <View style={styles.sectionWrap}>
+              <SectionHeader
+                title={view === "overview" ? listTitle : "At-a-glance analytics"}
+                right={
+                  <View style={styles.sectionActions}>
+                    {view === "overview" ? (
+                      <TouchableOpacity onPress={() => setSlice("default")} style={styles.linkBtn}>
+                        <Text style={styles.link}>Reset slice</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {canExport ? (
+                      <TouchableOpacity onPress={() => void exportDueSoon()} style={styles.linkBtn} disabled={exportBusy}>
+                        <Text style={styles.link}>{exportBusy ? "Exporting..." : "Export due soon"}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {canExport ? (
+                      <TouchableOpacity onPress={() => void exportTopVendors()} style={styles.linkBtn} disabled={exportBusy}>
+                        <Text style={styles.link}>{exportBusy ? "Exporting..." : "Export top vendors"}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity onPress={() => navigation.navigate("RecordsTab")} style={styles.linkBtn}>
+                      <Text style={styles.link}>Open records</Text>
+                    </TouchableOpacity>
+                  </View>
+                }
+              />
+
+              {view === "analytics" ? (
+                <View style={styles.analyticsCard}>
+                  <View style={styles.analyticsTitleRow}>
+                    <View style={styles.analyticsTitleIcon}>
+                      <Ionicons name="analytics-outline" size={16} color={theme.colors.accent} />
+                    </View>
+                    <Text style={styles.analyticsTitle}>Analytics</Text>
+                    <View style={{ flex: 1 }} />
+                    <View style={styles.analyticsPill}>
+                      <Text style={styles.analyticsPillText}>{`Loaded ${records.length}`}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.analyticsSub}>Alert mix (active)</Text>
+                  {Object.entries(alertCounts).map(([k, v]) => {
+                    const total = Math.max(1, active.length);
+                    const pct = Math.round((v / total) * 100);
+                    const color =
+                      k === "red"
+                        ? theme.colors.danger
+                        : k === "orange"
+                          ? theme.colors.warning
+                          : k === "yellow"
+                            ? theme.colors.warning
+                            : theme.colors.success;
                     return (
-                      <View key={v.name} style={styles.alertRow}>
-                        <Text style={[styles.alertKey, { width: 70 }]} numberOfLines={1}>
-                          {v.name}
-                        </Text>
+                      <View key={k} style={styles.alertRow}>
+                        <Text style={styles.alertKey}>{k.toUpperCase()}</Text>
                         <View style={styles.alertBarTrack}>
-                          <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: "#a78bfa" }]} />
+                          <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: color }]} />
                         </View>
-                        <Text style={styles.alertVal}>{v.count}</Text>
+                        <Text style={styles.alertVal}>{v}</Text>
                       </View>
                     );
-                  })
-                ) : (
-                  <Text style={styles.analyticsHint}>No vendor volume in the current slice.</Text>
-                )}
+                  })}
 
-                <View style={styles.divider} />
+                  <View style={styles.divider} />
 
-                <Text style={styles.analyticsSub}>Department workload</Text>
-                {deptWorkload.length ? (
-                  deptWorkload.map((d) => {
-                    const max = Math.max(1, ...deptWorkload.map((x) => x.active));
-                    const pct = Math.round((d.active / max) * 100);
+                  <Text style={styles.analyticsSub}>Stage distribution (active)</Text>
+                  {stageCounts.map((v, idx) => {
+                    const total = Math.max(1, active.length);
+                    const pct = Math.round((v / total) * 100);
+                    const label = STAGE_LABELS[idx] || `Stage ${idx + 1}`;
                     return (
-                      <View key={d.dept} style={styles.alertRow}>
-                        <Text style={[styles.alertKey, { width: 70 }]} numberOfLines={1}>
-                          {d.dept}
-                        </Text>
+                      <View key={label} style={styles.alertRow}>
+                        <Text style={styles.alertKey}>{`S${idx + 1}`}</Text>
                         <View style={styles.alertBarTrack}>
-                          <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: "#0ea5e9" }]} />
+                          <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: theme.colors.accent }]} />
                         </View>
-                        <Text style={styles.alertVal}>{d.active}</Text>
+                        <Text style={styles.alertVal}>{v}</Text>
                       </View>
                     );
-                  })
-                ) : (
-                  <Text style={styles.analyticsHint}>No departments found.</Text>
-                )}
+                  })}
 
-                <View style={styles.divider} />
+                  <View style={styles.divider} />
 
-                <Text style={styles.analyticsSub}>Aging buckets (active)</Text>
-                {agingBuckets.map((b) => {
-                  const max = Math.max(1, ...agingBuckets.map((x) => x.count));
-                  const pct = Math.round((b.count / max) * 100);
-                  return (
-                    <View key={b.key} style={styles.alertRow}>
-                      <Text style={styles.alertKey}>{b.key}</Text>
-                      <View style={styles.alertBarTrack}>
-                        <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: "#f59e0b" }]} />
+                  <Text style={styles.analyticsSub}>Entry trend (last 14 days)</Text>
+                  <View style={styles.trendRow}>
+                    {entryTrend.rows.map((r) => (
+                      <View key={r.day} style={styles.trendCol}>
+                        <View
+                          style={[
+                            styles.trendBar,
+                            { height: Math.max(3, Math.round((r.count / entryTrend.max) * 36)) },
+                          ]}
+                        />
+                        <Text style={styles.trendLabel}>{r.day}</Text>
                       </View>
-                      <Text style={styles.alertVal}>{b.count}</Text>
-                    </View>
-                  );
-                })}
+                    ))}
+                  </View>
 
-                <Text style={styles.analyticsHint}>
-                  Mobile-friendly summaries based on loaded records (up to 120).
-                </Text>
-              </View>
-            ) : null}
+                  <View style={styles.divider} />
+
+                  <Text style={styles.analyticsSub}>Top vendors by volume (active)</Text>
+                  {topVendors.length ? (
+                    topVendors.map((v) => {
+                      const max = Math.max(1, ...topVendors.map((x) => x.qty));
+                      const pct = Math.round((v.qty / max) * 100);
+                      return (
+                        <View key={v.name} style={styles.alertRow}>
+                          <Text style={[styles.alertKey, { width: 70 }]} numberOfLines={1}>
+                            {v.name}
+                          </Text>
+                          <View style={styles.alertBarTrack}>
+                            <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: theme.colors.accentHover }]} />
+                          </View>
+                          <Text style={styles.alertVal}>{v.count}</Text>
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <Text style={styles.analyticsHint}>No vendor volume in the current slice.</Text>
+                  )}
+
+                  <View style={styles.divider} />
+
+                  <Text style={styles.analyticsSub}>Department workload</Text>
+                  {deptWorkload.length ? (
+                    deptWorkload.map((d) => {
+                      const max = Math.max(1, ...deptWorkload.map((x) => x.active));
+                      const pct = Math.round((d.active / max) * 100);
+                      return (
+                        <View key={d.dept} style={styles.alertRow}>
+                          <Text style={[styles.alertKey, { width: 70 }]} numberOfLines={1}>
+                            {d.dept}
+                          </Text>
+                          <View style={styles.alertBarTrack}>
+                            <View
+                              style={[
+                                styles.alertBarFill,
+                                { width: `${pct}%`, backgroundColor: theme.colors.accent },
+                              ]}
+                            />
+                          </View>
+                          <Text style={styles.alertVal}>{d.active}</Text>
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <Text style={styles.analyticsHint}>No departments found.</Text>
+                  )}
+
+                  <View style={styles.divider} />
+
+                  <Text style={styles.analyticsSub}>Aging buckets (active)</Text>
+                  {agingBuckets.map((b) => {
+                    const max = Math.max(1, ...agingBuckets.map((x) => x.count));
+                    const pct = Math.round((b.count / max) * 100);
+                    return (
+                      <View key={b.key} style={styles.alertRow}>
+                        <Text style={styles.alertKey}>{b.key}</Text>
+                        <View style={styles.alertBarTrack}>
+                          <View style={[styles.alertBarFill, { width: `${pct}%`, backgroundColor: theme.colors.warning }]} />
+                        </View>
+                        <Text style={styles.alertVal}>{b.count}</Text>
+                      </View>
+                    );
+                  })}
+
+                  <Text style={styles.analyticsHint}>
+                    Mobile-friendly summaries based on loaded records (up to 120).
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         }
         renderItem={({ item }) => (
@@ -611,10 +657,10 @@ export function DashboardScreen({ navigation }) {
             <View style={styles.rowTop}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
-                  {item.record_number || "—"}
+                  {item.record_number || "-"}
                 </Text>
                 <Text style={styles.rowSub} numberOfLines={1}>
-                  {(item.vendor_name || "—") + ` · Stage ${item.current_stage ?? "—"}`}
+                  {(item.vendor_name || "-") + ` / Stage ${item.current_stage ?? "-"}`}
                 </Text>
               </View>
               {(() => {
@@ -638,47 +684,123 @@ export function DashboardScreen({ navigation }) {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            {slice === "queue"
-              ? "Nothing in your queue. Pull to refresh."
-              : "No records in this slice. Pull to refresh."}
-          </Text>
+          <View style={[styles.row, styles.emptyCard]} pointerEvents="none">
+            <Text style={styles.emptyText}>
+              {slice === "queue" ? "Nothing in your queue." : "No records in this slice."}
+            </Text>
+            <Text style={styles.emptySub}>Pull to refresh.</Text>
+          </View>
         }
-        contentContainerStyle={listData.length === 0 ? styles.emptyWrap : styles.listPad}
+        contentContainerStyle={styles.listPad}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f8fafc" },
+  safe: { flex: 1, backgroundColor: theme.colors.bg },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  headerWrap: { padding: 12, paddingBottom: 4 },
-  headerCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 12,
+  headerWrap: { paddingHorizontal: theme.space.md, paddingTop: theme.space.md, paddingBottom: theme.space.xs },
+  headerCard: { overflow: "hidden", borderRadius: theme.radius.xl },
+  headerInner: { padding: theme.space.md, gap: 14 },
+  heroRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
+    paddingBottom: 2,
   },
+  brandMark: {
+    width: 46,
+    height: 46,
+    borderRadius: theme.radius.lg,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  brandLogo: {
+    width: "100%",
+    height: "100%",
+  },
+  heroDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+  },
+  brandName: { fontSize: 15, lineHeight: 19, fontWeight: "900", color: theme.colors.textBright },
+  brandSub: { marginTop: 1, fontSize: 10, letterSpacing: 1.1, fontWeight: "900", color: theme.colors.textMuted },
+  brandIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.tintSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandAvatarText: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
   headerTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  title: { fontSize: 20, fontWeight: "800", color: "#0f172a" },
-  meta: { fontSize: 12, color: "#64748b" },
+  title: { fontSize: 24, lineHeight: 29, fontWeight: "900", color: theme.colors.textBright },
+  meta: { marginTop: 2, fontSize: 13, lineHeight: 18, color: theme.colors.text, fontWeight: "700" },
   roleRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
+  statusStrip: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    backgroundColor: "rgba(216, 237, 232, 0.42)",
+    overflow: "hidden",
+  },
+  statusItem: {
+    flex: 1,
+    minHeight: 58,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  statusDivider: {
+    width: 1,
+    backgroundColor: theme.colors.border,
+  },
+  statusValue: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "900",
+    color: theme.colors.textBright,
+    includeFontPadding: false,
+  },
+  statusDanger: { color: theme.colors.danger },
+  statusLabel: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 14,
+    color: theme.colors.text,
+    fontWeight: "800",
+  },
   roleChip: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(14,165,233,0.12)",
+    backgroundColor: theme.colors.accentMuted,
     borderWidth: 1,
-    borderColor: "rgba(14,165,233,0.20)",
+    borderColor: "rgba(15, 118, 110, 0.22)",
   },
   roleChipAlt: {
-    backgroundColor: "rgba(16,185,129,0.12)",
-    borderColor: "rgba(16,185,129,0.20)",
+    backgroundColor: "rgba(34, 197, 94, 0.12)",
+    borderColor: "rgba(34, 197, 94, 0.18)",
   },
-  roleChipText: { color: "#0f172a", fontWeight: "900", fontSize: 11 },
+  roleChipText: { color: theme.colors.textBright, fontWeight: "900", fontSize: 11 },
+  sectionWrap: { paddingBottom: 4, paddingTop: 2 },
   quickActions: { gap: 8, alignItems: "flex-end" },
   iconBtn: {
     flexDirection: "row",
@@ -688,140 +810,124 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(255,255,255,0.8)",
   },
-  iconBtnText: { fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  iconBtnText: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
   segment: {
     flexDirection: "row",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "rgba(255,255,255,0.75)",
   },
   segmentBtn: { flex: 1, paddingVertical: 10, alignItems: "center" },
-  segmentBtnOn: { backgroundColor: "#0ea5e9" },
-  segmentText: { fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  segmentBtnOn: { backgroundColor: theme.colors.accent },
+  segmentText: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
   segmentTextOn: { color: "#fff" },
-  kpiRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    padding: 12,
-    gap: 10,
-  },
-  kpiCard: {
-    flexGrow: 1,
-    flexBasis: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 12,
-    overflow: "hidden",
-  },
-  kpiCardOn: { borderColor: "rgba(14,165,233,0.55)", backgroundColor: "rgba(14,165,233,0.06)" },
-  kpiTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  kpiIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  kpiIconWrapOn: { backgroundColor: "#0ea5e9", borderColor: "#0ea5e9" },
-  kpiLabel: { fontSize: 12, color: "#64748b", fontWeight: "700" },
-  kpiLabelOn: { color: "#0369a1" },
-  kpiValue: { marginTop: 6, fontSize: 22, color: "#0f172a", fontWeight: "900" },
-  kpiValueOn: { color: "#0f172a" },
-  kpiSelectedPill: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "#0ea5e9",
-  },
-  kpiSelectedPillText: { color: "#fff", fontWeight: "900", fontSize: 10 },
+  kpiGrid: { paddingHorizontal: theme.space.md, paddingTop: theme.space.xs, paddingBottom: theme.space.sm, gap: 10 },
+  kpiRowLine: { flexDirection: "row", gap: 10 },
+  kpiCard: { flex: 1, minWidth: 0 },
+  kpiCardPlaceholder: { flex: 1, minWidth: 0, minHeight: 96, opacity: 0 },
+  // KPI cards moved to `components/ui/StatCard.jsx` (keep dashboard styles lean).
   sectionHead: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     gap: 10,
   },
-  sectionTitle: { fontSize: 14, fontWeight: "800", color: "#0f172a" },
-  sectionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", maxWidth: 200 },
-  linkBtn: { paddingVertical: 6, paddingHorizontal: 6 },
-  link: { fontSize: 12, fontWeight: "900", color: "#15803d" },
-  analyticsCard: {
-    marginHorizontal: 12,
-    marginBottom: 10,
-    backgroundColor: "#fff",
-    borderRadius: 12,
+  sectionTitle: { fontSize: 14, fontWeight: "800", color: theme.colors.textBright },
+  sectionActions: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", maxWidth: 230 },
+  linkBtn: {
+    minHeight: 32,
+    justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.accentSoft,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 12,
-    gap: 8,
+    borderColor: "rgba(15, 118, 110, 0.12)",
+  },
+  link: { fontSize: 11, lineHeight: 14, fontWeight: "900", color: theme.colors.accentHover },
+  analyticsCard: {
+    marginHorizontal: theme.space.md,
+    marginBottom: 10,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.space.md,
+    gap: 9,
+    ...theme.shadow.sm,
   },
   analyticsTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  analyticsTitle: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
+  analyticsTitleIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: theme.colors.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  analyticsTitle: { fontSize: 15, lineHeight: 19, fontWeight: "900", color: theme.colors.textBright },
   analyticsPill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "rgba(15, 23, 42, 0.04)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
   },
-  analyticsPillText: { fontSize: 11, fontWeight: "900", color: "#0f172a" },
-  analyticsSub: { marginTop: 8, fontSize: 12, fontWeight: "900", color: "#0f172a", opacity: 0.85 },
-  analyticsHint: { fontSize: 12, color: "#64748b", lineHeight: 16, marginTop: 4 },
-  divider: { height: 1, backgroundColor: "#e2e8f0", marginTop: 10, marginBottom: 2 },
-  alertRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  alertKey: { width: 70, fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  analyticsPillText: { fontSize: 11, fontWeight: "900", color: theme.colors.textBright },
+  analyticsSub: { marginTop: 9, fontSize: 13, lineHeight: 17, fontWeight: "900", color: theme.colors.textBright, opacity: 0.88 },
+  analyticsHint: { fontSize: 12, color: theme.colors.text, lineHeight: 17, marginTop: 4, fontWeight: "700" },
+  divider: { height: 1, backgroundColor: theme.colors.border, marginTop: 10, marginBottom: 2 },
+  alertRow: { minHeight: 26, flexDirection: "row", alignItems: "center", gap: 8 },
+  alertKey: { width: 70, fontSize: 11, lineHeight: 14, fontWeight: "900", color: theme.colors.textBright },
   alertBarTrack: {
     flex: 1,
     height: 10,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "rgba(15, 23, 42, 0.08)",
     borderRadius: 99,
     overflow: "hidden",
   },
   alertBarFill: { height: 10, backgroundColor: "#22c55e" },
-  alertVal: { width: 32, textAlign: "right", fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  alertVal: { width: 32, textAlign: "right", fontSize: 12, lineHeight: 15, fontWeight: "900", color: theme.colors.textBright },
   trendRow: { flexDirection: "row", alignItems: "flex-end", gap: 4, marginTop: 8, flexWrap: "nowrap" },
-  trendCol: { alignItems: "center", width: 20 },
-  trendBar: { width: 14, borderRadius: 6, backgroundColor: "#0ea5e9" },
-  trendLabel: { marginTop: 4, fontSize: 9, color: "#64748b" },
-  listPad: { paddingBottom: 16 },
+  trendCol: { alignItems: "center", flex: 1, minWidth: 18 },
+  trendBar: { width: 14, borderRadius: 6, backgroundColor: theme.colors.accent },
+  trendLabel: { marginTop: 4, fontSize: 9, color: theme.colors.text },
+  listPad: { paddingBottom: 22 },
   row: {
-    backgroundColor: "#fff",
-    marginHorizontal: 12,
-    marginVertical: 6,
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: theme.colors.surfaceStrong,
+    marginHorizontal: theme.space.md,
+    marginVertical: 5,
+    padding: theme.space.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
     gap: 10,
+    ...theme.shadow.sm,
   },
   rowTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  rowTitle: { fontSize: 16, fontWeight: "900", color: "#0f172a" },
-  rowSub: { marginTop: 3, fontSize: 13, color: "#64748b", fontWeight: "700" },
+  rowTitle: { fontSize: 16, lineHeight: 20, fontWeight: "900", color: theme.colors.textBright },
+  rowSub: { marginTop: 3, fontSize: 13, lineHeight: 17, color: theme.colors.text, fontWeight: "700" },
   alertBadge: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
   },
-  alertBadgeText: { fontSize: 11, fontWeight: "900" },
+  alertBadgeText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
   rowFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  rowFootText: { flex: 1, fontSize: 12, color: "#475569", fontWeight: "800" },
-  emptyWrap: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  empty: { textAlign: "center", color: "#64748b", fontSize: 14 },
+  rowFootText: { flex: 1, fontSize: 12, lineHeight: 16, color: theme.colors.text, fontWeight: "800" },
+  emptyCard: {
+    minHeight: 92,
+    justifyContent: "center",
+  },
+  emptyText: { color: theme.colors.textBright, fontSize: 14, fontWeight: "800" },
+  emptySub: { color: theme.colors.text, fontSize: 13, fontWeight: "700" },
 });
-

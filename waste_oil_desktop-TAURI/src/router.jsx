@@ -35,6 +35,16 @@ const VendorsPage = lazy(() =>
 const AuditLogPage = lazy(() =>
   import("@/pages/audit/AuditLogPage.jsx").then((m) => ({ default: m.AuditLogPage })),
 );
+const SecuritySessionsPage = lazy(() =>
+  import("@/pages/security/SecuritySessionsPage.jsx").then((m) => ({
+    default: m.SecuritySessionsPage,
+  })),
+);
+const InAppNotificationsPage = lazy(() =>
+  import("@/pages/security/InAppNotificationsPage.jsx").then((m) => ({
+    default: m.InAppNotificationsPage,
+  })),
+);
 
 function SuspensePage({ children }) {
   return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
@@ -67,7 +77,7 @@ function PasswordGate() {
     return <Outlet />;
   }
   const p = (loc.pathname || "/").replace(/\/+$/, "") || "/";
-  if (p === "/" || p === "/records") {
+  if (p === "/" || p === "/records" || p === "/sessions" || p === "/notifications") {
     return <Outlet />;
   }
   const m = /^\/records\/([^/]+)$/.exec(p);
@@ -213,6 +223,22 @@ export const router = createHashRouter([
                     element: (
                       <SuspensePage>
                         <WorkflowQueue />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "sessions",
+                    element: (
+                      <SuspensePage>
+                        <SecuritySessionsPage />
+                      </SuspensePage>
+                    ),
+                  },
+                  {
+                    path: "notifications",
+                    element: (
+                      <SuspensePage>
+                        <InAppNotificationsPage />
                       </SuspensePage>
                     ),
                   },

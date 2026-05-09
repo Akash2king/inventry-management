@@ -14,11 +14,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
-import { canActEdit, canActForward, canActReturn } from "../../src/utils/permissions.js";
+import { canActEdit, canActForward, canActReturn, isCurrentHolder } from "../../src/utils/permissions.js";
 import { formatHolderLine } from "../../src/utils/holderDisplay.js";
 import { STAGE_LABELS } from "../../src/utils/stageLabels.js";
 import { nextStageName, prevStageName } from "../../src/utils/stageLabels.js";
 import { theme } from "../theme.js";
+import { diffDays, formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { fromByteArray } from "base64-js";
@@ -195,6 +196,28 @@ export function RecordDetailScreen({ navigation, route }) {
   const showRet = !mustChangePassword && canActReturn(record, user);
   const selectedCandidate = candidates.find((c) => String(c?.id) === String(selectedCandidateId));
   const holderLabel = formatHolderLine(record);
+  const holderIsViewer =
+    record?.viewer_is_holder !== undefined && record?.viewer_is_holder !== null
+      ? Boolean(record.viewer_is_holder)
+      : isCurrentHolder(record, user);
+  const readOnlyViewer =
+    !locked &&
+    !holderIsViewer &&
+    user &&
+    ["storeman", "treatment", "admin", "manager", "gm", "superadmin"].includes(user.role);
+  const needsCorrection = Boolean(record?.needs_workflow_correction);
+  const returnFeedback =
+    typeof record?.pending_return_feedback === "string" && record.pending_return_feedback.trim()
+      ? record.pending_return_feedback.trim()
+      : null;
+  const slaTotal =
+    typeof record?.sla_total_days === "number"
+      ? record.sla_total_days
+      : slaTotalDays(record?.entry_date, record?.due_date);
+  const daysSinceEntry =
+    typeof record?.days_elapsed === "number" ? record.days_elapsed : diffDays(record?.entry_date);
+  const effectiveAlert = record?.computed_alert_level || record?.alert_level;
+  const canSeeHoldingTimeline = user?.role === "manager" || user?.role === "gm";
   const stageName =
     record?.current_stage != null
       ? STAGE_LABELS[Math.max(0, Number(record.current_stage) - 1)] || `Stage ${record.current_stage}`
@@ -233,6 +256,48 @@ export function RecordDetailScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>{record.record_number}</Text>
 
+        {needsCorrection && !locked ? (
+          <View style={[styles.visibilityBanner, holderIsViewer ? styles.bannerWarn : styles.bannerMuted]}>
+            <Text style={styles.visibilityTitle}>Returned to this stage - corrections requested</Text>
+            <Text style={styles.visibilityText}>
+              {returnFeedback || "No detailed reason was provided."}
+            </Text>
+            <Text style={styles.visibilityText}>
+              {holderIsViewer
+                ? "Update the record, then forward it when it is ready for the next department."
+                : "Only the current holder can edit and forward this correction."}
+            </Text>
+          </View>
+        ) : null}
+
+        {readOnlyViewer ? (
+          <View style={styles.visibilityBanner}>
+            <Text style={styles.visibilityTitle}>View only</Text>
+            <Text style={styles.visibilityText}>
+              You can open this record because you worked on it or it is visible in your pipeline.
+              Actions belong to the current holder: {holderLabel}.
+            </Text>
+          </View>
+        ) : null}
+
+        {mustChangePassword ? (
+          <View style={styles.visibilityBanner}>
+            <Text style={styles.visibilityTitle}>View only until password update</Text>
+            <Text style={styles.visibilityText}>
+              Forward, return, and edit stay disabled until you change your password.
+            </Text>
+          </View>
+        ) : null}
+
+        {holderIsViewer && !locked && !mustChangePassword ? (
+          <View style={[styles.visibilityBanner, styles.bannerSuccess]}>
+            <Text style={styles.visibilityTitle}>You are the current holder</Text>
+            <Text style={styles.visibilityText}>
+              You can forward, return, or edit when your role matches this stage.
+            </Text>
+          </View>
+        ) : null}
+
         {record.photo_path ? (
           <View style={styles.photoBlock}>
             {photoUri ? (
@@ -252,6 +317,32 @@ export function RecordDetailScreen({ navigation, route }) {
             </View>
           </View>
         ) : null}
+
+        <View style={styles.overviewCard}>
+          <Text style={styles.sectionTitle}>Record overview</Text>
+          <View style={styles.infoGrid}>
+            <Info label="Vendor" value={record.vendor_name || record.vendor?.name || "-"} />
+            <Info label="Product" value={record.product_type || "-"} />
+            <Info label="Packaging" value={record.packaging || "-"} />
+            <Info label="Quantity" value={formatQty(record.quantity, record.unit)} />
+            <Info label="Stage" value={`${record.current_stage} / ${stageName}`} />
+            <Info label="Alert" value={effectiveAlert || "-"} />
+            <Info label="Entry" value={formatDate(record.entry_date)} />
+            <Info label="Due" value={formatDate(record.due_date)} />
+            <Info
+              label="SLA window"
+              value={slaTotal != null ? `${slaTotal} day${slaTotal === 1 ? "" : "s"}` : "-"}
+            />
+            <Info
+              label="Days since entry"
+              value={typeof daysSinceEntry === "number" ? String(daysSinceEntry) : "-"}
+            />
+            <Info label="Department" value={record.current_department_name || "-"} />
+            <Info label="Current holder" value={holderLabel || "-"} />
+            <Info label="Driver" value={record.driver_name || "-"} />
+            <Info label="Vehicle" value={record.vehicle_details || "-"} />
+          </View>
+        </View>
 
         <Text style={styles.line}>
           Vendor: {record.vendor_name || record.vendor?.name || "—"}
@@ -293,6 +384,28 @@ export function RecordDetailScreen({ navigation, route }) {
         ) : (
           <Text style={styles.mutedSmall}>No workflow transitions recorded yet.</Text>
         )}
+
+        {canSeeHoldingTimeline && Array.isArray(record.holder_time_log) && record.holder_time_log.length > 0 ? (
+          <View style={styles.overviewCard}>
+            <Text style={styles.sectionTitle}>Holding timeline</Text>
+            <Text style={styles.mutedSmall}>
+              In/out times are tracked automatically as records move through holders.
+            </Text>
+            {record.holder_time_log.map((row, idx) => (
+              <View key={`${row.holder_username || "na"}-${idx}`} style={styles.holdingRow}>
+                <Text style={styles.holdingTitle}>
+                  {row.holder_name || row.holder_username || "Unassigned"}
+                </Text>
+                <Text style={styles.holdingMeta}>
+                  {row.time_in ? formatDate(row.time_in) : "-"} to {row.time_out ? formatDate(row.time_out) : "still holding"}
+                </Text>
+                <Text style={styles.holdingMeta}>
+                  {row.duration_display || "-"} / {row.released_via || "active"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {!locked ? (
           <View style={styles.actions}>
@@ -482,6 +595,17 @@ export function RecordDetailScreen({ navigation, route }) {
   );
 }
 
+function Info({ label, value }) {
+  return (
+    <View style={styles.infoItem}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={2}>
+        {String(value ?? "-")}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
@@ -523,7 +647,49 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: theme.colors.textBright,
   },
+  visibilityBanner: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: theme.radius.lg,
+    padding: 12,
+    gap: 5,
+  },
+  bannerWarn: {
+    borderColor: "rgba(201, 162, 39, 0.45)",
+    backgroundColor: "rgba(255, 232, 160, 0.35)",
+  },
+  bannerMuted: {
+    backgroundColor: "rgba(15, 23, 42, 0.04)",
+  },
+  bannerSuccess: {
+    borderColor: "rgba(22, 163, 74, 0.20)",
+    backgroundColor: "rgba(34, 197, 94, 0.10)",
+  },
+  visibilityTitle: { fontSize: 13, fontWeight: "900", color: theme.colors.textBright },
+  visibilityText: { fontSize: 12, lineHeight: 17, fontWeight: "700", color: theme.colors.text },
+  overviewCard: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: theme.radius.lg,
+    padding: 12,
+    gap: 10,
+  },
+  infoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  infoItem: {
+    width: "47%",
+    minWidth: 130,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(15, 23, 42, 0.03)",
+    borderRadius: 12,
+    padding: 10,
+  },
+  infoLabel: { fontSize: 11, fontWeight: "900", color: theme.colors.text },
+  infoValue: { marginTop: 4, fontSize: 13, lineHeight: 17, fontWeight: "900", color: theme.colors.textBright },
   line: {
+    display: "none",
     fontSize: 15,
     color: theme.colors.textBright,
   },
@@ -595,6 +761,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textBright,
     lineHeight: 16,
   },
+  holdingRow: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: "rgba(15, 23, 42, 0.03)",
+  },
+  holdingTitle: { fontSize: 13, fontWeight: "900", color: theme.colors.textBright },
+  holdingMeta: { marginTop: 3, fontSize: 12, lineHeight: 16, fontWeight: "700", color: theme.colors.text },
   actions: {
     flexDirection: "row",
     gap: 12,

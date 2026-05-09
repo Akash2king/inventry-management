@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 
-from .models import CustomUser
+from .models import CustomUser, UserAuthSession
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -67,6 +67,42 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.must_change_password = False
         user.save(update_fields=["password", "must_change_password"])
         return user
+
+
+class UserAuthSessionSerializer(serializers.ModelSerializer):
+    """Active sign-in rows for settings / security UI."""
+
+    is_current = serializers.SerializerMethodField()
+    user_agent_short = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserAuthSession
+        fields = (
+            "id",
+            "client_kind",
+            "device_label",
+            "app_version",
+            "platform",
+            "ip_address",
+            "user_agent_short",
+            "created_at",
+            "last_seen_at",
+            "revoked_at",
+            "is_current",
+        )
+        read_only_fields = fields
+
+    def get_is_current(self, obj: UserAuthSession) -> bool:
+        cur = self.context.get("current_session_id")
+        if not cur:
+            return False
+        return str(cur) == str(obj.id)
+
+    def get_user_agent_short(self, obj: UserAuthSession) -> str:
+        ua = (obj.user_agent or "").strip()
+        if len(ua) <= 120:
+            return ua
+        return ua[:117] + "..."
 
 
 class WasteOilTokenRefreshSerializer(TokenRefreshSerializer):

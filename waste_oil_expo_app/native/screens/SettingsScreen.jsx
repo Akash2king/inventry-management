@@ -91,6 +91,17 @@ export function SettingsScreen({ navigation }) {
               onPress={() => navigation.navigate("ChangePassword")}
             />
 
+            <ActionRow
+              icon="phone-portrait-outline"
+              label="Devices"
+              onPress={() => navigation.navigate("Sessions")}
+            />
+            <ActionRow
+              icon="notifications-outline"
+              label="Workflow notifications"
+              onPress={() => navigation.navigate("InAppNotifications")}
+            />
+
             {user.role === "manager" || user.role === "gm" || user.role === "superadmin" ? (
               <ActionRow
                 icon="shield-checkmark-outline"

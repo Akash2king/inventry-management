@@ -13,7 +13,7 @@ from apps.accounts.permissions import (
     IsStoreman,
     IsTreatment,
 )
-from apps.accounts.models import CustomUser, Department
+from apps.accounts.models import CustomUser, Department, UserAuthSession
 from apps.audit.models import AuditLog
 from apps.records.models import Vendor, WasteOilRecord
 
@@ -52,6 +52,9 @@ class AuthEndpointTests(TestCase):
         self.assertIn("user", res.data)
         self.assertEqual(res.data["user"]["role"], CustomUser.Role.STOREMAN)
         self.assertEqual(str(res.data["user"]["department_id"]), str(self.dept.id))
+        self.assertIn("session", res.data)
+        self.assertEqual(res.data["session"]["client_kind"], "unknown")
+        self.assertTrue(UserAuthSession.objects.filter(user=self.user).exists())
 
         access = AccessToken(res.data["access_token"])
         self.assertEqual(access["role"], CustomUser.Role.STOREMAN)
@@ -85,7 +88,7 @@ class AuthEndpointTests(TestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn("access_token", res.data)
-        self.assertNotIn("refresh", res.data)
+        self.assertIn("refresh_token", res.data)
 
     def test_logout_blacklists_refresh_subsequent_refresh_401(self):
         login = self.client.post(
@@ -185,7 +188,7 @@ class PermissionClassTests(TestCase):
     def test_is_current_holder(self):
         holder = self._user(CustomUser.Role.STOREMAN)
         other = self._user(CustomUser.Role.MANAGER)
-        v = Vendor.objects.create(name="V", contact="")
+        v = Vendor.objects.create(name="V")
         record = WasteOilRecord.objects.create(
             record_number="WO-2026-000099",
             vendor=v,

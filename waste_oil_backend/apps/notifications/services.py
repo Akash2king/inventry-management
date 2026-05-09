@@ -5,10 +5,39 @@ from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+from apps.notifications.in_app import (
+    mirror_email_as_user_notification,
+    mirror_email_to_users,
+    users_from_email_recipients,
+)
+from apps.notifications.models import UserNotification
 from apps.records.models import WasteOilRecord
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+def _safe_mirror_pipeline_email(
+    users: list | None,
+    *,
+    kind: str,
+    subject: str,
+    body_text: str,
+    metadata: dict | None = None,
+) -> None:
+    """Same copy as email → in-app feed (desktop + mobile). Never blocks email."""
+    if not users:
+        return
+    try:
+        mirror_email_to_users(
+            users,
+            kind=kind,
+            email_subject=subject,
+            email_body_text=body_text,
+            metadata=metadata or {},
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("pipeline_in_app_mirror_failed kind=%s exc=%s", kind, exc)
 
 
 def _actor_display(user: User | None) -> str | None:
@@ -139,6 +168,16 @@ class NotificationService:
             NotificationService._send_email(
                 subject, body_text, [email], html_body=html_body
             )
+            _safe_mirror_pipeline_email(
+                [next_holder],
+                kind=UserNotification.Kind.RECORD_FORWARDED,
+                subject=subject,
+                body_text=body_text,
+                metadata={
+                    "record_id": str(record.id),
+                    "record_number": record.record_number,
+                },
+            )
             return
 
         # Final-stage completion: notify GM / Manager distribution list
@@ -172,6 +211,16 @@ class NotificationService:
         except Exception:  # pragma: no cover
             html_body = None
         NotificationService._send_email(subject, body_text, recipients, html_body=html_body)
+        _safe_mirror_pipeline_email(
+            users_from_email_recipients(recipients),
+            kind=UserNotification.Kind.RECORD_COMPLETED,
+            subject=subject,
+            body_text=body_text,
+            metadata={
+                "record_id": str(record.id),
+                "record_number": record.record_number,
+            },
+        )
 
     @staticmethod
     def send_return_notification(
@@ -224,6 +273,16 @@ class NotificationService:
         except Exception:  # pragma: no cover
             html_body = None
         NotificationService._send_email(subject, body_text, [email], html_body=html_body)
+        _safe_mirror_pipeline_email(
+            [prev_holder],
+            kind=UserNotification.Kind.RECORD_RETURNED,
+            subject=subject,
+            body_text=body_text,
+            metadata={
+                "record_id": str(record.id),
+                "record_number": record.record_number,
+            },
+        )
 
     @staticmethod
     def send_sla_alert(record: WasteOilRecord, level: str) -> None:
@@ -294,6 +353,17 @@ class NotificationService:
             recipients,
             html_body=html_body,
         )
+        _safe_mirror_pipeline_email(
+            users_from_email_recipients(recipients),
+            kind=UserNotification.Kind.SLA_ALERT,
+            subject=subject,
+            body_text=body_text,
+            metadata={
+                "record_id": str(record.id),
+                "record_number": record.record_number,
+                "level": level,
+            },
+        )
 
     @staticmethod
     def send_monthly_report_email(report: dict, subject: str, recipients: list[str]) -> None:
@@ -352,6 +422,13 @@ class NotificationService:
             html_body=html_body,
             attachments=attachments,
         )
+        _safe_mirror_pipeline_email(
+            users_from_email_recipients(recipients),
+            kind=UserNotification.Kind.MONTHLY_REPORT,
+            subject=subject,
+            body_text=body_text,
+            metadata={"source": "monthly_gm_report"},
+        )
 
     @staticmethod
     def send_welcome_employee_email(user: User, initial_password: str) -> None:
@@ -402,3 +479,13 @@ class NotificationService:
             [email],
             html_body=html_body,
         )
+        try:
+            mirror_email_as_user_notification(
+                user,
+                kind=UserNotification.Kind.WELCOME_EMPLOYEE,
+                email_subject=subject,
+                email_body_text=body_text,
+                metadata={"username": user.username},
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("welcome_in_app_mirror_failed user=%s exc=%s", user.pk, exc)

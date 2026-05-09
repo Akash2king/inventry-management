@@ -12,6 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../AuthContext.jsx";
 
@@ -22,6 +23,21 @@ function normalizeUuid(v) {
 function toNumber(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function formatDateValue(date) {
+  const d = date instanceof Date ? date : new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseDateValue(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!m) return new Date();
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
 export function RecordFormScreen({ navigation, route }) {
@@ -59,6 +75,7 @@ export function RecordFormScreen({ navigation, route }) {
   const [vehicleDetails, setVehicleDetails] = useState("");
   const [remarks, setRemarks] = useState("");
   const [photoAsset, setPhotoAsset] = useState(null);
+  const [datePicker, setDatePicker] = useState(null); // entry | due | null
 
   const vendorName = useMemo(() => {
     const row = vendors.find((v) => String(v.id) === String(vendorId));
@@ -113,9 +130,7 @@ export function RecordFormScreen({ navigation, route }) {
       }
     } else if (mode === "create") {
       // defaults
-      const today = new Date();
-      const iso = today.toISOString().slice(0, 10);
-      setEntryDate((p) => (p ? p : iso));
+      setEntryDate((p) => (p ? p : formatDateValue(new Date())));
     }
 
     setLoading(false);
@@ -212,6 +227,17 @@ export function RecordFormScreen({ navigation, route }) {
     setOptionModal(null);
     setOptionSearch("");
     setNewOption("");
+  }
+
+  function applyPickedDate(event, selectedDate) {
+    const field = datePicker;
+    if (Platform.OS === "android") {
+      setDatePicker(null);
+    }
+    if (event?.type === "dismissed" || !selectedDate || !field) return;
+    const next = formatDateValue(selectedDate);
+    if (field === "entry") setEntryDate(next);
+    if (field === "due") setDueDate(next);
   }
 
   async function createNewOption() {
@@ -323,23 +349,24 @@ export function RecordFormScreen({ navigation, route }) {
           placeholderTextColor="#94a3b8"
         />
 
-        <Text style={styles.label}>Entry date (YYYY-MM-DD) *</Text>
-        <TextInput
-          value={entryDate}
-          onChangeText={setEntryDate}
-          style={styles.input}
-          placeholder="2026-05-06"
-          placeholderTextColor="#94a3b8"
-        />
+        <Text style={styles.label}>Entry date *</Text>
+        <TouchableOpacity style={styles.dateSelect} onPress={() => setDatePicker("entry")}>
+          <Text style={styles.selectText}>{entryDate || "Select entry date"}</Text>
+          <Text style={styles.dateSelectHint}>Change</Text>
+        </TouchableOpacity>
 
-        <Text style={styles.label}>Due date (YYYY-MM-DD)</Text>
-        <TextInput
-          value={dueDate}
-          onChangeText={setDueDate}
-          style={styles.input}
-          placeholder="Optional"
-          placeholderTextColor="#94a3b8"
-        />
+        <Text style={styles.label}>Due date</Text>
+        <View style={styles.dateRow}>
+          <TouchableOpacity style={[styles.dateSelect, { flex: 1 }]} onPress={() => setDatePicker("due")}>
+            <Text style={styles.selectText}>{dueDate || "Select due date"}</Text>
+            <Text style={styles.dateSelectHint}>Choose</Text>
+          </TouchableOpacity>
+          {dueDate ? (
+            <TouchableOpacity style={styles.clearDateBtn} onPress={() => setDueDate("")}>
+              <Text style={styles.clearDateText}>Clear</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
         <View style={styles.advHead}>
           <Text style={styles.advTitle}>More details (optional)</Text>
@@ -396,6 +423,24 @@ export function RecordFormScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {datePicker ? (
+        <View style={Platform.OS === "ios" ? styles.iosPickerWrap : null}>
+          {Platform.OS === "ios" ? (
+            <View style={styles.iosPickerHead}>
+              <TouchableOpacity onPress={() => setDatePicker(null)}>
+                <Text style={styles.modalClose}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <DateTimePicker
+            value={parseDateValue(datePicker === "entry" ? entryDate : dueDate)}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={applyPickedDate}
+          />
+        </View>
+      ) : null}
 
       <Modal visible={vendorModal} animationType="slide">
         <SafeAreaView style={styles.modalSafe} edges={["bottom"]}>
@@ -539,6 +584,47 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   selectText: { color: "#0f172a", fontSize: 16, fontWeight: "700" },
+  dateRow: { flexDirection: "row", alignItems: "stretch", gap: 10 },
+  dateSelect: {
+    marginTop: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  dateSelectHint: { color: "#15803d", fontSize: 12, fontWeight: "900" },
+  clearDateBtn: {
+    marginTop: 6,
+    minWidth: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  clearDateText: { color: "#475569", fontSize: 12, fontWeight: "900" },
+  iosPickerWrap: {
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingBottom: 10,
+  },
+  iosPickerHead: {
+    minHeight: 44,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
   advHead: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#e2e8f0" },
   advTitle: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
   photoBtn: {

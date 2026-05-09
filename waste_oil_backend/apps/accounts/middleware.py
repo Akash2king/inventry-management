@@ -7,6 +7,8 @@ from django.http import JsonResponse
 from rest_framework.request import Request
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from .session_service import touch_session_last_seen
+
 
 def _normalize_path(path: str) -> str:
     p = path.rstrip("/")
@@ -24,6 +26,17 @@ _EXEMPT_PATHS = frozenset(
         "/api/v1/health",
     }
 )
+
+
+def _password_flow_exempt_path(path: str) -> bool:
+    """Allow session + in-app notification APIs while must_change_password is true."""
+    if path in _EXEMPT_PATHS:
+        return True
+    if path.startswith("/api/v1/auth/sessions"):
+        return True
+    if path.startswith("/api/v1/notifications"):
+        return True
+    return False
 
 # Under /api/v1/records/ these subpaths are workflow actions (not browse-only).
 _RECORDS_ACTION_MARKERS = ("/forward/", "/return/", "/forward-candidates/")
@@ -73,11 +86,13 @@ class ForcePasswordChangeMiddleware:
         if path.startswith("/api/v1"):
             _attach_user_from_jwt(request)
             user = getattr(request, "user", None)
+            if user is not None and getattr(user, "is_authenticated", False):
+                touch_session_last_seen(request, user)
             if (
                 user is not None
                 and user.is_authenticated
                 and getattr(user, "must_change_password", False)
-                and path not in _EXEMPT_PATHS
+                and not _password_flow_exempt_path(path)
                 and not _allowed_read_only_while_must_change_password(request, path)
                 and not path.startswith("/admin")
             ):

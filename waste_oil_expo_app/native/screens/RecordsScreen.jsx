@@ -10,13 +10,17 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useAuth } from "../AuthContext.jsx";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 import { theme } from "../theme.js";
+import { formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
+import { formatHolderLine } from "../../src/utils/holderDisplay.js";
 
 const STAGES = ["", "1", "2", "3", "4", "5"];
 const ALERTS = ["", "green", "yellow", "orange", "red", "completed"];
@@ -36,6 +40,21 @@ function daysBetween(a, b) {
   if (!da || !db || Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null;
   const ms = db.getTime() - da.getTime();
   return Math.max(0, Math.round(ms / 86400000));
+}
+
+function formatDateValue(date) {
+  const d = date instanceof Date ? date : new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseDateValue(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!m) return new Date();
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
 function badgeColor(level) {
@@ -71,6 +90,7 @@ export function RecordsScreen({ navigation }) {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [departmentId, setDepartmentId] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
+  const [datePicker, setDatePicker] = useState(null);
 
   const excludeCompleted = mode !== "all";
   const canSeeAll = user?.role === "gm" || user?.role === "superadmin" || user?.role === "manager";
@@ -80,12 +100,22 @@ export function RecordsScreen({ navigation }) {
     let n = 0;
     if (stage) n += 1;
     if (alert) n += 1;
+    if (search.trim()) n += 1;
     if (dateFrom.trim()) n += 1;
     if (dateTo.trim()) n += 1;
     if (overdueOnly) n += 1;
     if (departmentId.trim()) n += 1;
     return n;
-  }, [stage, alert, dateFrom, dateTo, overdueOnly, departmentId]);
+  }, [stage, alert, search, dateFrom, dateTo, overdueOnly, departmentId]);
+
+  function applyPickedDate(event, selectedDate) {
+    const field = datePicker;
+    if (Platform.OS === "android") setDatePicker(null);
+    if (event?.type === "dismissed" || !selectedDate || !field) return;
+    const next = formatDateValue(selectedDate);
+    if (field === "from") setDateFrom(next);
+    if (field === "to") setDateTo(next);
+  }
 
   // Default GM/Superadmin/Manager to "all" once user is known.
   useEffect(() => {
@@ -320,6 +350,29 @@ export function RecordsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {activeFilterCount > 0 ? (
+        <View style={styles.filterBanner}>
+          <Text style={styles.filterBannerText}>
+            {activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setStage("");
+              setAlert("");
+              setSearch("");
+              setDateFrom("");
+              setDateTo("");
+              setOverdueOnly(false);
+              setDepartmentId("");
+              setLoading(true);
+              void load(1, { append: false });
+            }}
+          >
+            <Text style={styles.filterBannerAction}>Clear all</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {showFilters ? (
         <View style={styles.filters}>
           <View style={styles.filterRow}>
@@ -362,24 +415,18 @@ export function RecordsScreen({ navigation }) {
 
           <View style={styles.filterGrid}>
             <View style={{ flex: 1, minWidth: 140 }}>
-              <Text style={styles.filterLabel}>Date from (YYYY-MM-DD)</Text>
-              <TextInput
-                value={dateFrom}
-                onChangeText={setDateFrom}
-                placeholder="2026-01-01"
-                placeholderTextColor="#94a3b8"
-                style={styles.filterInput}
-              />
+              <Text style={styles.filterLabel}>Date from</Text>
+              <TouchableOpacity style={styles.dateFilter} onPress={() => setDatePicker("from")}>
+                <Text style={styles.dateFilterText}>{dateFrom || "Start date"}</Text>
+                <Text style={styles.dateFilterAction}>Pick</Text>
+              </TouchableOpacity>
             </View>
             <View style={{ flex: 1, minWidth: 140 }}>
-              <Text style={styles.filterLabel}>Date to (YYYY-MM-DD)</Text>
-              <TextInput
-                value={dateTo}
-                onChangeText={setDateTo}
-                placeholder="2026-01-31"
-                placeholderTextColor="#94a3b8"
-                style={styles.filterInput}
-              />
+              <Text style={styles.filterLabel}>Date to</Text>
+              <TouchableOpacity style={styles.dateFilter} onPress={() => setDatePicker("to")}>
+                <Text style={styles.dateFilterText}>{dateTo || "End date"}</Text>
+                <Text style={styles.dateFilterAction}>Pick</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -508,6 +555,12 @@ export function RecordsScreen({ navigation }) {
                   </Text>
                 </View>
               ) : null}
+              {item.needs_workflow_correction && !item.pending_return_feedback ? (
+                <View style={styles.notice}>
+                  <Text style={styles.noticeTitle}>Needs workflow correction</Text>
+                  <Text style={styles.noticeText}>Review this record before forwarding.</Text>
+                </View>
+              ) : null}
 
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>Product</Text>
@@ -525,23 +578,23 @@ export function RecordsScreen({ navigation }) {
                 <Text style={styles.kvVal}>{fmt(item.current_stage)}</Text>
                 <Text style={styles.kvKey}>Qty</Text>
                 <Text style={styles.kvVal}>
-                  {fmt(item.quantity)} {item.unit || ""}
+                  {formatQty(item.quantity, item.unit)}
                 </Text>
               </View>
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>Entry</Text>
-                <Text style={styles.kvVal}>{fmt(item.entry_date)}</Text>
+                <Text style={styles.kvVal}>{formatDate(item.entry_date)}</Text>
                 <Text style={styles.kvKey}>Due</Text>
-                <Text style={styles.kvVal}>{fmt(item.due_date)}</Text>
+                <Text style={styles.kvVal}>{formatDate(item.due_date)}</Text>
               </View>
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>SLA</Text>
                 <Text style={styles.kvVal}>
                   {typeof item.sla_total_days === "number"
                     ? `${item.sla_total_days}d`
-                    : daysBetween(item.entry_date, item.due_date) != null
-                      ? `${daysBetween(item.entry_date, item.due_date)}d`
-                      : "—"}
+                    : slaTotalDays(item.entry_date, item.due_date) != null
+                      ? `${slaTotalDays(item.entry_date, item.due_date)}d`
+                      : "-"}
                 </Text>
                 <Text style={styles.kvKey}>Dept</Text>
                 <Text style={styles.kvVal} numberOfLines={1}>
@@ -563,14 +616,10 @@ export function RecordsScreen({ navigation }) {
               <View style={styles.kvRow}>
                 <Text style={styles.kvKey}>Holder</Text>
                 <Text style={styles.kvVal} numberOfLines={1}>
-                  {item.current_holder_name || item.current_holder_username
-                    ? `${item.current_holder_name || ""}${item.current_holder_username ? ` (@${item.current_holder_username})` : ""}`
-                    : item.current_holder
-                      ? String(item.current_holder)
-                      : "—"}
+                  {formatHolderLine(item)}
                 </Text>
                 <Text style={styles.kvKey}>Photo</Text>
-                <Text style={styles.kvVal}>{item.photo_path ? "Yes" : "—"}</Text>
+                <Text style={styles.kvVal}>{item.photo_path ? "Yes" : "-"}</Text>
               </View>
 
               {item.remarks ? (
@@ -605,6 +654,23 @@ export function RecordsScreen({ navigation }) {
           contentContainerStyle={records.length === 0 ? styles.emptyWrap : styles.listPad}
         />
       )}
+      {datePicker ? (
+        <View style={Platform.OS === "ios" ? styles.iosPickerWrap : null}>
+          {Platform.OS === "ios" ? (
+            <View style={styles.iosPickerHead}>
+              <TouchableOpacity onPress={() => setDatePicker(null)}>
+                <Text style={styles.modalClose}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <DateTimePicker
+            value={parseDateValue(datePicker === "from" ? dateFrom : dateTo)}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={applyPickedDate}
+          />
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -690,6 +756,19 @@ const styles = StyleSheet.create({
   },
   headerChipText: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
   headerChipTextOn: { color: "#fff" },
+  filterBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: theme.colors.tintSoft,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  filterBannerText: { color: theme.colors.textBright, fontSize: 12, fontWeight: "900" },
+  filterBannerAction: { color: theme.colors.accentHover, fontSize: 12, fontWeight: "900" },
   center: {
     flex: 1,
     justifyContent: "center",
@@ -756,6 +835,37 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     backgroundColor: "#fff",
   },
+  dateFilter: {
+    marginTop: 6,
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  dateFilterText: { color: "#0f172a", fontSize: 13, fontWeight: "800" },
+  dateFilterAction: { color: theme.colors.accentHover, fontSize: 12, fontWeight: "900" },
+  iosPickerWrap: {
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingBottom: 10,
+  },
+  iosPickerHead: {
+    minHeight: 44,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalClose: { color: theme.colors.accentHover, fontWeight: "900" },
   switchRow: {
     marginTop: 6,
     flexDirection: "row",

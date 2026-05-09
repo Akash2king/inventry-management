@@ -6,6 +6,7 @@ import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
 
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
+const LS_SESSION = "wom_session_id";
 const API_TIMEOUT_MS = 12000;
 
 async function fetchWithTimeout(url, init, timeoutMs = API_TIMEOUT_MS) {
@@ -45,6 +46,44 @@ function formatError(data) {
 function createBrowserApi(baseUrl) {
   const base = baseUrl.replace(/\/+$/, "");
 
+  async function tryRefreshAccess() {
+    const refresh = localStorage.getItem(LS_REFRESH);
+    if (!refresh) {
+      return false;
+    }
+    const url = `${base}/auth/refresh/`;
+    let res;
+    try {
+      res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refresh }),
+      });
+    } catch {
+      return false;
+    }
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+    }
+    if (!res.ok || !data?.access_token) {
+      return false;
+    }
+    localStorage.setItem(LS_ACCESS, data.access_token);
+    if (data.refresh_token) {
+      localStorage.setItem(LS_REFRESH, data.refresh_token);
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("wom:tokens-refreshed"));
+    }
+    return true;
+  }
+
   async function request(method, path, options = {}) {
     const {
       body,
@@ -52,6 +91,7 @@ function createBrowserApi(baseUrl) {
       token,
       skipAuth,
       headers: extra = {},
+      _didRefresh,
     } = options;
     const url = `${base}/${path.replace(/^\//, "")}`;
     const headers = { ...extra };
@@ -64,6 +104,10 @@ function createBrowserApi(baseUrl) {
           : localStorage.getItem(LS_ACCESS);
       if (authToken) {
         headers.Authorization = `Bearer ${authToken}`;
+      }
+      const sid = localStorage.getItem(LS_SESSION);
+      if (sid) {
+        headers["X-Session-Id"] = sid;
       }
     }
 
@@ -107,9 +151,27 @@ function createBrowserApi(baseUrl) {
     }
 
     if (res.status === 401) {
+      const p = path.replace(/^\//, "");
+      const canTryRefresh =
+        !skipAuth &&
+        authToken &&
+        !_didRefresh &&
+        !p.startsWith("auth/login") &&
+        !p.startsWith("auth/refresh") &&
+        !p.startsWith("auth/logout");
+      if (canTryRefresh) {
+        const refreshed = await tryRefreshAccess();
+        if (refreshed) {
+          // Drop caller-supplied token so the retry uses the new access_token from localStorage.
+          const retryOpts = { ...options, _didRefresh: true };
+          delete retryOpts.token;
+          return request(method, path, retryOpts);
+        }
+      }
       if (!skipAuth && authToken) {
         localStorage.removeItem(LS_ACCESS);
         localStorage.removeItem(LS_REFRESH);
+        localStorage.removeItem(LS_SESSION);
         window.dispatchEvent(new CustomEvent("wom:auth-expired"));
       }
       return {
@@ -142,6 +204,10 @@ function createBrowserApi(baseUrl) {
     if (authToken) {
       headers.Authorization = `Bearer ${authToken}`;
     }
+    const sidPdf = localStorage.getItem(LS_SESSION);
+    if (sidPdf) {
+      headers["X-Session-Id"] = sidPdf;
+    }
     let res;
     try {
       res = await fetchWithTimeout(url, { method: "GET", headers });
@@ -157,6 +223,7 @@ function createBrowserApi(baseUrl) {
       if (authToken) {
         localStorage.removeItem(LS_ACCESS);
         localStorage.removeItem(LS_REFRESH);
+        localStorage.removeItem(LS_SESSION);
         window.dispatchEvent(new CustomEvent("wom:auth-expired"));
       }
       const text = await res.text();
@@ -214,6 +281,10 @@ function createBrowserApi(baseUrl) {
     if (authToken) {
       headers.Authorization = `Bearer ${authToken}`;
     }
+    const sid = localStorage.getItem(LS_SESSION);
+    if (sid) {
+      headers["X-Session-Id"] = sid;
+    }
     let res;
     try {
       res = await fetchWithTimeout(url, { method: "GET", headers });
@@ -229,6 +300,7 @@ function createBrowserApi(baseUrl) {
       if (authToken) {
         localStorage.removeItem(LS_ACCESS);
         localStorage.removeItem(LS_REFRESH);
+        localStorage.removeItem(LS_SESSION);
         window.dispatchEvent(new CustomEvent("wom:auth-expired"));
       }
       const text = await res.text();
@@ -281,6 +353,11 @@ function createBrowserApi(baseUrl) {
           if (res.data.refresh_token) {
             localStorage.setItem(LS_REFRESH, res.data.refresh_token);
           }
+          if (res.data.session?.id) {
+            localStorage.setItem(LS_SESSION, String(res.data.session.id));
+          } else {
+            localStorage.removeItem(LS_SESSION);
+          }
         }
         return res;
       },
@@ -293,8 +370,20 @@ function createBrowserApi(baseUrl) {
         });
         localStorage.removeItem(LS_ACCESS);
         localStorage.removeItem(LS_REFRESH);
+        localStorage.removeItem(LS_SESSION);
         return { ok: true, status: 200, data: { detail: "Logged out." } };
       },
+      listSessions: async (params = {}, tokenArg) => {
+        const p = new URLSearchParams();
+        if (params.active === false) {
+          p.set("active", "0");
+        } else {
+          p.set("active", "1");
+        }
+        return request("GET", `auth/sessions/?${p.toString()}`, { token: tokenArg });
+      },
+      revokeSession: async (id, tokenArg) =>
+        request("DELETE", `auth/sessions/${id}/`, { token: tokenArg }),
       me: async (tokenArg) => {
         const t =
           tokenArg !== undefined && tokenArg !== null && tokenArg !== ""
@@ -447,6 +536,38 @@ function createBrowserApi(baseUrl) {
     audit: {
       getLogs: async (queryString = "", tokenArg) =>
         request("GET", `audit/logs/${queryString || ""}`, { token: tokenArg }),
+    },
+    adminConsole: {
+      analyticsSummary: (tokenArg) =>
+        request("GET", "admin-console/analytics/summary/", { token: tokenArg }),
+      analyticsRecordsByStage: (tokenArg) =>
+        request("GET", "admin-console/analytics/records/by-stage/", { token: tokenArg }),
+      analyticsRecordsByAlert: (tokenArg) =>
+        request("GET", "admin-console/analytics/records/by-alert/", { token: tokenArg }),
+    },
+    notifications: {
+      list: async (params = {}, tokenArg) => {
+        const p = new URLSearchParams();
+        if (params.unread) {
+          p.set("unread", "1");
+        }
+        if (params.page != null && params.page !== "") {
+          p.set("page", String(params.page));
+        }
+        if (params.page_size != null && params.page_size !== "") {
+          p.set("page_size", String(params.page_size));
+        }
+        const q = p.toString();
+        return request("GET", q ? `notifications/?${q}` : "notifications/", {
+          token: tokenArg,
+        });
+      },
+      unreadCount: async (tokenArg) =>
+        request("GET", "notifications/unread-count/", { token: tokenArg }),
+      markRead: async (id, tokenArg) =>
+        request("POST", `notifications/${id}/read/`, { token: tokenArg }),
+      markAllRead: async (tokenArg) =>
+        request("POST", "notifications/mark-all-read/", { token: tokenArg }),
     },
     onAuthExpired: (callback) => {
       const fn = () => callback();

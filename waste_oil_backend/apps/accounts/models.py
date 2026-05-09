@@ -82,3 +82,48 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class UserAuthSession(models.Model):
+    """
+    Server-side session row tied to the current refresh token JTI (rotates with SimpleJWT).
+    Clients send X-Session-Id (this row's id) on authenticated requests for last_seen updates.
+    """
+
+    class ClientKind(models.TextChoices):
+        TAURI = "tauri", _("Desktop (Tauri)")
+        EXPO = "expo", _("Mobile (Expo)")
+        WEB = "web", _("Web browser")
+        UNKNOWN = "unknown", _("Unknown")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="auth_sessions",
+        db_column="user_id",
+    )
+    refresh_jti = models.CharField(max_length=255, unique=True, db_index=True)
+    client_kind = models.CharField(
+        max_length=20,
+        choices=ClientKind.choices,
+        default=ClientKind.UNKNOWN,
+    )
+    device_label = models.CharField(max_length=200, blank=True)
+    app_version = models.CharField(max_length=80, blank=True)
+    platform = models.CharField(max_length=120, blank=True)
+    user_agent = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "user_auth_sessions"
+        indexes = [
+            models.Index(fields=["user", "-last_seen_at"]),
+            models.Index(fields=["user", "revoked_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} {self.client_kind} {self.id}"

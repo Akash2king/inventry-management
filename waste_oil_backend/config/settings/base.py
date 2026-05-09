@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,7 +19,7 @@ DEBUG = os.environ.get("DEBUG", "False").lower() in ("1", "true", "yes")
 
 ALLOWED_HOSTS = [
     h.strip()
-    for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",")
     if h.strip()
 ]
 
@@ -116,7 +117,7 @@ REST_FRAMEWORK = {
 }
 
 _access_min = int(os.environ.get("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", "60"))
-_refresh_days = int(os.environ.get("JWT_REFRESH_TOKEN_LIFETIME_DAYS", "7"))
+_refresh_days = int(os.environ.get("JWT_REFRESH_TOKEN_LIFETIME_DAYS", "60"))
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=_access_min),
@@ -146,6 +147,13 @@ CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_from_env + _DEFAULT_CORS_DEV_ORI
 # default, controlled by an env flag if you ever need to tighten it.
 if os.environ.get("CORS_ALLOW_ALL_ORIGINS", "true").lower() in ("1", "true", "yes"):
     CORS_ALLOW_ALL_ORIGINS = True
+
+# Tauri / browser clients send X-Session-Id on JWT requests; it is not in corsheaders'
+# default allow-list, so preflight fails with "Failed to fetch" while React Native (Expo)
+# does not run browser CORS and appears to work.
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-session-id",
+]
 
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
