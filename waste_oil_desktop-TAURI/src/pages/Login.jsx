@@ -136,8 +136,9 @@ export function Login() {
               The API bridge is not available.
             </p>
             <p style={{ fontSize: "0.9rem", opacity: 0.9, marginTop: "1rem", lineHeight: 1.5 }}>
-              Set <code>VITE_API_BASE_URL</code> in <code>.env</code> (see <code>.env.example</code>)
-              so the browser/Tauri API shim can load, then run <code>npm run dev</code>.
+              Set <code>VITE_API_BASE_URL</code> in <code>.env</code> to your backend URL, for example
+              <code>http://192.168.1.46:8000/api/v1</code> (see <code>.env.example</code>) so the
+              browser/Tauri API shim can load, then run <code>npm run dev</code>.
             </p>
           </div>
         </div>

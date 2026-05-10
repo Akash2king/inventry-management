@@ -22,12 +22,17 @@ function bumpHeaderUnreadBadge() {
 
 export function InAppNotificationsPage() {
   const token = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [pushStatus, setPushStatus] = useState("");
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastBody, setBroadcastBody] = useState("");
+  const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const canBroadcast = user?.role === "manager" || user?.role === "gm" || user?.role === "superadmin";
 
   useEffect(() => {
     if (!isSystemNotificationSupported()) {
@@ -81,6 +86,28 @@ export function InAppNotificationsPage() {
       bumpHeaderUnreadBadge();
     } catch (e) {
       setError(e?.message || "Could not update");
+    }
+  }
+
+  async function onBroadcast() {
+    if (!token || !canBroadcast) return;
+    const title = broadcastTitle.trim();
+    const body = broadcastBody.trim();
+    if (!title) return;
+    setBroadcastBusy(true);
+    setError("");
+    try {
+      const res = await notifApi.broadcastNotification({ title, body }, token);
+      if (!res?.ok) {
+        throw new Error(res?.error || "Could not send notification");
+      }
+      setBroadcastTitle("");
+      setBroadcastBody("");
+      await load();
+    } catch (e) {
+      setError(e?.message || "Could not send notification");
+    } finally {
+      setBroadcastBusy(false);
     }
   }
 
@@ -167,6 +194,65 @@ export function InAppNotificationsPage() {
             )}
           </div>
         )}
+
+        {canBroadcast ? (
+          <div
+            style={{
+              marginBottom: "1rem",
+              padding: "1rem",
+              borderRadius: "12px",
+              border: "1px solid rgba(15,23,42,0.12)",
+              background: "rgba(22, 163, 74, 0.05)",
+              display: "grid",
+              gap: "0.75rem",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "0.98rem" }}>Send announcement</div>
+              <div style={{ marginTop: "0.2rem", fontSize: "0.88rem", opacity: 0.82 }}>
+                Send a custom notification to every active user. It will show in the notification feed on desktop and mobile.
+              </div>
+            </div>
+            <input
+              value={broadcastTitle}
+              onChange={(e) => setBroadcastTitle(e.target.value)}
+              placeholder="Title"
+              style={{
+                width: "100%",
+                borderRadius: "10px",
+                border: "1px solid rgba(15,23,42,0.14)",
+                padding: "0.8rem 0.9rem",
+                fontSize: "0.95rem",
+                background: "#fff",
+              }}
+            />
+            <textarea
+              value={broadcastBody}
+              onChange={(e) => setBroadcastBody(e.target.value)}
+              placeholder="Message"
+              rows={3}
+              style={{
+                width: "100%",
+                borderRadius: "10px",
+                border: "1px solid rgba(15,23,42,0.14)",
+                padding: "0.8rem 0.9rem",
+                fontSize: "0.95rem",
+                resize: "vertical",
+                background: "#fff",
+              }}
+            />
+            <div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={broadcastBusy || !broadcastTitle.trim()}
+                onClick={() => void onBroadcast()}
+              >
+                {broadcastBusy ? "Sending…" : "Send to all users"}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap", alignItems: "center" }}>
           <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.9rem" }}>

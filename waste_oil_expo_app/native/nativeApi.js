@@ -458,6 +458,8 @@ export function createNativeApi(rawBaseUrl) {
         request("POST", "notifications/devices/", { json: data, token: tokenArg }),
       unregisterDevice: async (tokenValue, tokenArg) =>
         request("DELETE", "notifications/devices/", { json: { token: tokenValue }, token: tokenArg }),
+        broadcast: async (data, tokenArg) =>
+          request("POST", "notifications/broadcast/", { json: data, token: tokenArg }),
       markRead: async (id, tokenArg) =>
         request("POST", `notifications/${id}/read/`, { token: tokenArg }),
       markAllRead: async (tokenArg) =>

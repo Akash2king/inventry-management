@@ -5,121 +5,28 @@ from apps.records.models import WasteOilRecord
 
 from .services import NotificationService
 
-User = get_user_model()
-
 import logging
-from django.conf import settings
-from .models import NotificationDevice
-import requests
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
 
 @shared_task(name="notifications.send_pushes")
 def send_pushes_task(user_ids, title, body, metadata=None):
-    """Celery task to send push notifications to users' registered devices.
+    """Backend-only notification task.
 
-    user_ids: list of user PKs
-    title/body: strings
-    metadata: optional dict
+    The mobile app polls the backend and creates local notifications itself,
+    so this task only logs the intended delivery for debugging.
     """
     try:
-        if not user_ids:
-            return {"sent": 0}
-        tokens = list(
-            NotificationDevice.objects.filter(user__id__in=user_ids)
-            .values_list("token", flat=True)
-            .distinct()
+        logger.info(
+            "backend_only_push_task users=%s title=%s body=%s metadata_keys=%s",
+            user_ids,
+            title,
+            body,
+            sorted((metadata or {}).keys()),
         )
-        if not tokens:
-            return {"sent": 0}
-
-        url = getattr(settings, "EXPO_PUSH_URL", "https://exp.host/--/api/v2/push/send")
-        chunk_size = 100
-        sent = 0
-        sent = 0
-        for i in range(0, len(tokens), chunk_size):
-            batch = tokens[i : i + chunk_size]
-            messages = [
-                {
-                    "to": t,
-                    "title": title or "Chem-Solv Inventory",
-                    "body": body or "",
-                    "data": metadata or {},
-                    "sound": "default",
-                    "priority": "high",
-                }
-                for t in batch
-            ]
-            resp = requests.post(url, json=messages, timeout=30)
-            try:
-                text = resp.text
-            except Exception:
-                text = ""
-            if resp.status_code >= 400:
-                logger.warning("push_send_failed status=%s resp=%s", resp.status_code, text[:500])
-                continue
-
-            # Attempt to parse ticket IDs from Expo response for receipts
-            try:
-                data = resp.json()
-            except Exception:
-                data = None
-
-            ticket_ids = []
-            if isinstance(data, dict) and data.get("data"):
-                # Some proxies wrap the response. Try to find ticket ids.
-                entries = data.get("data")
-            else:
-                entries = data
-
-            if isinstance(entries, list):
-                for entry in entries:
-                    # entry may be { "status": "ok", "id": "..." } or similar
-                    tid = entry.get("id") or entry.get("ticket_id")
-                    if tid:
-                        ticket_ids.append(tid)
-
-            # If we got ticket ids, try fetching receipts
-            if ticket_ids:
-                receipts_url = getattr(
-                    settings, "EXPO_PUSH_RECEIPT_URL", "https://exp.host/--/api/v2/push/getReceipts"
-                )
-                try:
-                    # short pause to allow receipts to appear
-                    import time
-
-                    time.sleep(1)
-                    receipts_resp = requests.post(receipts_url, json={"ids": ticket_ids}, timeout=20)
-                    try:
-                        receipts = receipts_resp.json()
-                    except Exception:
-                        receipts = None
-                    if receipts_resp.status_code >= 400:
-                        logger.warning(
-                            "push_receipts_failed status=%s resp=%s",
-                            receipts_resp.status_code,
-                            receipts_resp.text[:500],
-                        )
-                    else:
-                        # receipts is expected as a dict mapping id -> receipt
-                        if isinstance(receipts, dict):
-                            for tid, receipt in receipts.items():
-                                if not receipt:
-                                    continue
-                                if receipt.get("status") == "ok":
-                                    logger.info("push_receipt_ok id=%s", tid)
-                                else:
-                                    logger.warning(
-                                        "push_receipt_error id=%s details=%s",
-                                        tid,
-                                        receipt,
-                                    )
-                except Exception as exc:  # pragma: no cover - defensive
-                    logger.warning("push_receipt_exception %s", exc)
-
-            sent += len(batch)
-        return {"sent": sent}
+        return {"sent": 0, "backend_only": True}
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("send_pushes_task failed: %s", exc)
         return {"sent": 0, "error": str(exc)}

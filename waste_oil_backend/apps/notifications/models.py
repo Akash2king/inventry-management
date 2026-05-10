@@ -18,6 +18,7 @@ class UserNotification(models.Model):
         SLA_ALERT = "sla_alert", _("SLA alert")
         MONTHLY_REPORT = "monthly_report", _("Monthly report")
         WELCOME_EMPLOYEE = "welcome_employee", _("Welcome")
+        CUSTOM_BROADCAST = "custom_broadcast", _("Broadcast")
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

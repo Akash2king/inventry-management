@@ -1,9 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
 import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
-import { unregisterWorkflowPushToken } from "./systemNotifications.js";
 
 const AuthCtx = createContext(null);
 
@@ -60,7 +66,9 @@ export function AuthProvider({ children }) {
   }, [api]);
 
   const applyApiBase = useCallback(async (nextBase) => {
-    const b = String(nextBase || "").trim().replace(/\/+$/, "");
+    const b = String(nextBase || "")
+      .trim()
+      .replace(/\/+$/, "");
     setApiBase(b);
     setError("");
     if (!b) {
@@ -98,7 +106,9 @@ export function AuthProvider({ children }) {
           client: "expo",
           device_label: Constants.deviceName || `${Platform.OS} device`,
           app_version:
-            Constants.expoConfig?.version || String(Constants.nativeAppVersion || "") || "1.0.0",
+            Constants.expoConfig?.version ||
+            String(Constants.nativeAppVersion || "") ||
+            "1.0.0",
           platform: `${Platform.OS} ${String(Platform.Version ?? "")}`,
         },
       });
@@ -121,9 +131,6 @@ export function AuthProvider({ children }) {
       setUser(null);
       return;
     }
-    try {
-      await unregisterWorkflowPushToken(api);
-    } catch {}
     await api.auth.logout();
     setUser(null);
   }, [api]);
@@ -153,7 +160,17 @@ export function AuthProvider({ children }) {
       applyApiBase,
       refreshUser,
     }),
-    [api, apiBase, user, hydrating, error, login, logout, applyApiBase, refreshUser],
+    [
+      api,
+      apiBase,
+      user,
+      hydrating,
+      error,
+      login,
+      logout,
+      applyApiBase,
+      refreshUser,
+    ],
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

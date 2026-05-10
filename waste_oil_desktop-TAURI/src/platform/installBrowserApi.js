@@ -564,6 +564,8 @@ function createBrowserApi(baseUrl) {
       },
       unreadCount: async (tokenArg) =>
         request("GET", "notifications/unread-count/", { token: tokenArg }),
+      broadcast: async (data, tokenArg) =>
+        request("POST", "notifications/broadcast/", { json: data, token: tokenArg }),
       markRead: async (id, tokenArg) =>
         request("POST", `notifications/${id}/read/`, { token: tokenArg }),
       markAllRead: async (tokenArg) =>

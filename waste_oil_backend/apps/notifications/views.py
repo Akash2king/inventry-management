@@ -7,11 +7,14 @@ from rest_framework.response import Response
 
 from apps.notifications.models import UserNotification
 from apps.notifications.serializers import UserNotificationSerializer
-from apps.notifications.serializers import NotificationDeviceSerializer
+from apps.notifications.serializers import NotificationDeviceSerializer, BroadcastNotificationSerializer
 from apps.notifications.models import NotificationDevice
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from apps.notifications.in_app import broadcast_user_notification, mirror_email_as_user_notification
+from apps.accounts.models import CustomUser
+from apps.accounts.permissions import IsManagerOrAbove
 
 
 class NotificationDeviceRegisterView(APIView):
@@ -101,10 +104,48 @@ class SendTestPushView(APIView):
         title = request.data.get("title") or "Test notification"
         body = request.data.get("body") or "This is a test push from the server."
         try:
-            NotificationService.send_push_to_users([request.user], title, body, metadata={"test": True})
-            return Response({"detail": "push queued"}, status=status.HTTP_202_ACCEPTED)
+            note = mirror_email_as_user_notification(
+                request.user,
+                kind=UserNotification.Kind.WELCOME_EMPLOYEE,
+                email_subject=title,
+                email_body_text=body,
+                metadata={"test": True},
+            )
+            if note is None:
+                return Response({"detail": "unable to create notification"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "notification created", "id": str(note.id)}, status=status.HTTP_201_CREATED)
         except Exception as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BroadcastNotificationView(APIView):
+    """Send a custom notification to all active users.
+
+    Managers and above only.
+    """
+
+    permission_classes = [IsAuthenticated, IsManagerOrAbove]
+
+    def post(self, request):
+        serializer = BroadcastNotificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        title = serializer.validated_data["title"].strip()
+        body = serializer.validated_data.get("body", "").strip()
+        users = list(CustomUser.objects.filter(is_active=True).only("id", "username", "full_name"))
+        notes = broadcast_user_notification(
+            users,
+            kind=UserNotification.Kind.CUSTOM_BROADCAST,
+            title=title,
+            body=body,
+            metadata={"broadcast": True, "sent_by": str(request.user.id)},
+        )
+        return Response(
+            {
+                "detail": f"Created {len(notes)} notification(s).",
+                "sent": len(notes),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

@@ -1,15 +1,16 @@
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext.jsx";
 import {
   configureWorkflowNotifications,
   presentWorkflowLocalNotification,
   setAppBadgeCountSafe,
 } from "./systemNotifications.js";
-import { registerWorkflowPushToken } from "./systemNotifications.js";
 
 const POLL_MS = 60_000;
 const PUSH_COOLDOWN_MS = 45_000;
+const LAST_LOCAL_NOTIFICATION_ID = "wom_last_local_notification_id";
 
 /**
  * Polls unread workflow notifications and shows OS notifications when unread count increases.
@@ -18,10 +19,12 @@ export function WorkflowSystemNotificationBridge() {
   const { api, user } = useAuth();
   const baseline = useRef(null);
   const lastPushAt = useRef(0);
+  const lastNotifiedId = useRef(null);
 
   useEffect(() => {
     if (!api || !user) {
       baseline.current = null;
+      lastNotifiedId.current = null;
       return undefined;
     }
 
@@ -34,17 +37,27 @@ export function WorkflowSystemNotificationBridge() {
       const n = Number(countRes.data?.unread_count ?? 0);
       await setAppBadgeCountSafe(n);
 
+      const listRes = n > 0 ? await api.notifications.list({ unread: true, page_size: 1, page: 1 }) : null;
+      const row = listRes?.ok && Array.isArray(listRes.data?.results) ? listRes.data.results[0] : null;
+      const newestId = row?.id ? String(row.id) : null;
+      const storedLastId = await AsyncStorage.getItem(LAST_LOCAL_NOTIFICATION_ID);
+
       if (baseline.current === null) {
         baseline.current = n;
+        if (newestId && storedLastId !== newestId) {
+          const title = row?.title || "Chem-Solv Inventory";
+          const body = row?.body || "New workflow notification.";
+          await configureWorkflowNotifications();
+          await presentWorkflowLocalNotification({ title, body });
+          lastNotifiedId.current = newestId;
+          await AsyncStorage.setItem(LAST_LOCAL_NOTIFICATION_ID, newestId);
+        }
         return;
       }
 
       if (n > baseline.current && n > 0) {
         const now = Date.now();
         if (now - lastPushAt.current >= PUSH_COOLDOWN_MS) {
-          const listRes = await api.notifications.list({ unread: true, page_size: 1, page: 1 });
-          const row =
-            listRes.ok && Array.isArray(listRes.data?.results) ? listRes.data.results[0] : null;
           const title = row?.title || "Chem-Solv Inventory";
           const body =
             row?.body ||
@@ -52,6 +65,10 @@ export function WorkflowSystemNotificationBridge() {
           await configureWorkflowNotifications();
           await presentWorkflowLocalNotification({ title, body });
           lastPushAt.current = now;
+          if (newestId) {
+            lastNotifiedId.current = newestId;
+            await AsyncStorage.setItem(LAST_LOCAL_NOTIFICATION_ID, newestId);
+          }
         }
       }
 
@@ -59,34 +76,19 @@ export function WorkflowSystemNotificationBridge() {
     }
 
     void configureWorkflowNotifications().catch(() => {});
-    // Register push token with backend so server can send remote pushes when app is closed.
-    // Re-register on mount and when app becomes active to refresh tokens when needed.
-    const doRegister = async () => {
-      try {
-        await registerWorkflowPushToken(api);
-      } catch {}
-    };
-    void doRegister();
     void tick();
 
     const interval = setInterval(tick, POLL_MS);
-    // Re-run tick and re-register token when app becomes active.
     const onAppState = (state) => {
       if (state === "active") {
         void tick();
-        void doRegister();
       }
     };
     const sub = AppState.addEventListener("change", onAppState);
 
-    // Periodically refresh token every 6 hours as a best-effort
-    const REFRESH_TOKEN_MS = 6 * 60 * 60 * 1000;
-    const refreshInterval = setInterval(() => void doRegister(), REFRESH_TOKEN_MS);
-
     return () => {
       cancelled = true;
       clearInterval(interval);
-      clearInterval(refreshInterval);
       sub.remove();
     };
   }, [api, user]);

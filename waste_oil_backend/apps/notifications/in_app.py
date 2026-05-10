@@ -86,6 +86,29 @@ def mirror_email_as_user_notification_and_push(
     return note
 
 
+def broadcast_user_notification(
+    users: list,
+    *,
+    kind: str,
+    title: str,
+    body: str,
+    metadata: dict[str, Any] | None = None,
+) -> list[UserNotification]:
+    """Create the same notification for many users."""
+    created: list[UserNotification] = []
+    for user in users or []:
+        note = mirror_email_as_user_notification(
+            user,
+            kind=kind,
+            email_subject=title,
+            email_body_text=body,
+            metadata=metadata,
+        )
+        if note is not None:
+            created.append(note)
+    return created
+
+
 def mirror_email_to_users(
     users: list,
     *,

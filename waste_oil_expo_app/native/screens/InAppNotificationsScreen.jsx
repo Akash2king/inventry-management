@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  TextInput,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -26,13 +27,17 @@ function formatTs(iso) {
 }
 
 export function InAppNotificationsScreen({ navigation }) {
-  const { api } = useAuth();
+  const { api, user } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [pushPerm, setPushPerm] = useState("");
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastBody, setBroadcastBody] = useState("");
+  const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const canBroadcast = user?.role === "manager" || user?.role === "gm" || user?.role === "superadmin";
 
   useEffect(() => {
     void (async () => {
@@ -96,6 +101,25 @@ export function InAppNotificationsScreen({ navigation }) {
     await load("refresh");
   }
 
+  async function sendBroadcast() {
+    if (!api || !canBroadcast) return;
+    const title = broadcastTitle.trim();
+    const body = broadcastBody.trim();
+    if (!title) return;
+    setBroadcastBusy(true);
+    try {
+      const res = await api.notifications.broadcast({ title, body });
+      if (!res.ok) {
+        throw new Error(res.error || "Could not send notification");
+      }
+      setBroadcastTitle("");
+      setBroadcastBody("");
+      await load("refresh");
+    } finally {
+      setBroadcastBusy(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <View style={styles.toolbar}>
@@ -119,6 +143,39 @@ export function InAppNotificationsScreen({ navigation }) {
           <Text style={styles.chipGhostText}>Devices</Text>
         </TouchableOpacity>
       </View>
+
+      {canBroadcast ? (
+        <View style={styles.broadcastCard}>
+          <Text style={styles.broadcastTitle}>Send announcement</Text>
+          <Text style={styles.broadcastHelp}>
+            Send a custom message to all active users. It will appear in their notification feed and on the app.
+          </Text>
+          <TextInput
+            value={broadcastTitle}
+            onChangeText={setBroadcastTitle}
+            placeholder="Title"
+            placeholderTextColor="#94a3b8"
+            style={styles.broadcastInput}
+          />
+          <TextInput
+            value={broadcastBody}
+            onChangeText={setBroadcastBody}
+            placeholder="Message"
+            placeholderTextColor="#94a3b8"
+            style={[styles.broadcastInput, styles.broadcastTextArea]}
+            multiline
+            numberOfLines={3}
+          />
+          <TouchableOpacity
+            style={[styles.broadcastBtn, (!broadcastTitle.trim() || broadcastBusy) && styles.broadcastBtnDisabled]}
+            onPress={() => void sendBroadcast()}
+            disabled={!broadcastTitle.trim() || broadcastBusy}
+          >
+            <Text style={styles.broadcastBtnText}>{broadcastBusy ? "Sending…" : "Send to all users"}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {loading && !rows.length ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={theme.colors.accent} />
@@ -252,4 +309,36 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   pushBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  broadcastCard: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: theme.colors.surface,
+    gap: 10,
+  },
+  broadcastTitle: { fontSize: 15, fontWeight: "800", color: theme.colors.textBright },
+  broadcastHelp: { fontSize: 13, color: theme.colors.text, lineHeight: 18 },
+  broadcastInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    fontSize: 15,
+    color: theme.colors.textBright,
+    backgroundColor: theme.colors.bg,
+  },
+  broadcastTextArea: { minHeight: 92, textAlignVertical: "top" },
+  broadcastBtn: {
+    backgroundColor: theme.colors.accentHover,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  broadcastBtnDisabled: { opacity: 0.6 },
+  broadcastBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });

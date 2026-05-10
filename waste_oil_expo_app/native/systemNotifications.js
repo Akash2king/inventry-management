@@ -10,6 +10,14 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 const ANDROID_CHANNEL_ID = "workflow-notifications";
 const LS_PUSH_TOKEN = "wom_push_token";
 
+function getExpoProjectId() {
+  return (
+    Constants?.expoConfig?.extra?.eas?.projectId ||
+    Constants?.easConfig?.projectId ||
+    null
+  );
+}
+
 /** Expo Go cannot load expo-notifications on Android (SDK 53+). */
 export function isExpoPushRuntimeSupported() {
   if (Platform.OS === "web") {
@@ -57,7 +65,9 @@ export async function configureWorkflowNotifications() {
       name: "Workflow notifications",
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      sound: "default",
       vibrationPattern: [0, 220, 80, 220],
+      enableVibrate: true,
     });
   }
 }
@@ -117,7 +127,10 @@ export async function registerWorkflowPushToken(api) {
     // Expo push token (suitable for Expo push service) or device push token
     let tokenObj = null;
     try {
-      tokenObj = await Notifications.getExpoPushTokenAsync();
+      const projectId = getExpoProjectId();
+      tokenObj = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined,
+      );
     } catch (e) {
       try {
         tokenObj = await Notifications.getDevicePushTokenAsync();

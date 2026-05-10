@@ -8,6 +8,10 @@ export function unreadCount(token) {
   return unwrap(window.api.notifications.unreadCount(token));
 }
 
+export function broadcastNotification(data, token) {
+  return unwrap(window.api.notifications.broadcast(data || {}, token));
+}
+
 export function markRead(id, token) {
   return unwrap(window.api.notifications.markRead(id, token));
 }
