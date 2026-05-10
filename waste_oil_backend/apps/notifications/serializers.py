@@ -16,3 +16,10 @@ class UserNotificationSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = fields
+
+
+class NotificationDeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = __import__("apps.notifications.models", fromlist=["NotificationDevice"]).NotificationDevice
+        fields = ("id", "token", "platform", "created_at", "last_seen_at")
+        read_only_fields = ("id", "created_at", "last_seen_at")

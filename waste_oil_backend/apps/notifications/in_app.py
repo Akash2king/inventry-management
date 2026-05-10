@@ -60,6 +60,32 @@ def mirror_email_as_user_notification(
     )
 
 
+def mirror_email_as_user_notification_and_push(
+    user,
+    *,
+    kind: str,
+    email_subject: str,
+    email_body_text: str,
+    metadata: dict[str, Any] | None = None,
+) -> UserNotification | None:
+    note = mirror_email_as_user_notification(
+        user,
+        kind=kind,
+        email_subject=email_subject,
+        email_body_text=email_body_text,
+        metadata=metadata,
+    )
+    if note is not None:
+        try:
+            # Import here to avoid circular imports at module import time
+            from apps.notifications.services import NotificationService
+
+            NotificationService.send_push_to_users([user], note.title, note.body, metadata or {})
+        except Exception:
+            logger.warning("push_send_failed for user=%s", getattr(user, "pk", None))
+    return note
+
+
 def mirror_email_to_users(
     users: list,
     *,
@@ -70,7 +96,8 @@ def mirror_email_to_users(
 ) -> None:
     for u in users or []:
         try:
-            mirror_email_as_user_notification(
+            # create in-app notification and attempt push delivery
+            mirror_email_as_user_notification_and_push(
                 u,
                 kind=kind,
                 email_subject=email_subject,

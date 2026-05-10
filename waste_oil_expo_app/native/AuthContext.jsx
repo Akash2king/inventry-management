@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, View } from "react-native";
 import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
+import { unregisterWorkflowPushToken } from "./systemNotifications.js";
 
 const AuthCtx = createContext(null);
 
@@ -120,6 +121,9 @@ export function AuthProvider({ children }) {
       setUser(null);
       return;
     }
+    try {
+      await unregisterWorkflowPushToken(api);
+    } catch {}
     await api.auth.logout();
     setUser(null);
   }, [api]);

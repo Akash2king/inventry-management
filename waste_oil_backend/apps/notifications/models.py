@@ -46,3 +46,23 @@ class UserNotification(models.Model):
 
     def __str__(self):
         return f"{self.user_id} {self.kind} {self.created_at}"
+
+
+class NotificationDevice(models.Model):
+    """Device push tokens registered for a user (Expo / native)."""
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="devices"
+    )
+    token = models.CharField(max_length=512, db_index=True)
+    platform = models.CharField(max_length=16, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "notification_devices"
+        unique_together = ("user", "token")
+
+    def __str__(self):
+        return f"{self.user_id} {self.platform} {self.token[:12]}"

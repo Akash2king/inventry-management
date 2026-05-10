@@ -4,7 +4,6 @@ import { useAuthStore } from "@/store/authStore.js";
 import { useUiStore } from "@/store/uiStore.js";
 import { ToastContainer } from "@/components/ui/ToastContainer.jsx";
 import { maybeShowWorkflowSystemNotification } from "@/utils/systemNotifications.js";
-import appLogo from "@/assets/app-logo.png";
 
 const PUSH_COOLDOWN_MS = 45_000;
 
@@ -87,7 +86,6 @@ export function Header() {
   return (
     <header className="header-bar">
       <div className="header-bar__brand">
-        <img src={appLogo} alt="App logo" className="header-bar__logo" />
         <h1>Chem-Solv Inventory</h1>
         <ToastContainer />
       </div>

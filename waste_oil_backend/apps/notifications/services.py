@@ -10,6 +10,10 @@ from apps.notifications.in_app import (
     mirror_email_to_users,
     users_from_email_recipients,
 )
+from apps.notifications.models import NotificationDevice
+from django.conf import settings
+import requests
+import math
 from apps.notifications.models import UserNotification
 from apps.records.models import WasteOilRecord
 
@@ -364,6 +368,102 @@ class NotificationService:
                 "level": level,
             },
         )
+
+    @staticmethod
+    def send_push_to_users(users: list, title: str, body: str, metadata: dict | None = None) -> None:
+        """Send a simple push via Expo push API for users with registered tokens.
+
+        This is a lightweight example sender. For production you'd enqueue
+        deliveries to Celery and handle errors / receipts properly.
+        """
+        try:
+            # Prefer async Celery task for pushes
+            try:
+                from .tasks import send_pushes_task
+
+                user_ids = [getattr(u, "id", getattr(u, "pk", None)) for u in users if u]
+                send_pushes_task.delay(user_ids, title, body, metadata or {})
+                return
+            except Exception:
+                # fallback to synchronous send if Celery/task import fails
+                pass
+
+            tokens = list(
+                NotificationDevice.objects.filter(user__in=users)
+                .values_list("token", flat=True)
+                .distinct()
+            )
+            if not tokens:
+                return
+
+            # Expo push API expects batches of up to 100
+            url = getattr(settings, "EXPO_PUSH_URL", "https://exp.host/--/api/v2/push/send")
+            chunk_size = 100
+            for i in range(0, len(tokens), chunk_size):
+                batch = tokens[i : i + chunk_size]
+                messages = [
+                    {
+                        "to": t,
+                        "title": title or "Chem-Solv Inventory",
+                        "body": body or "",
+                        "data": metadata or {},
+                        "sound": "default",
+                        "priority": "high",
+                    }
+                    for t in batch
+                ]
+                resp = requests.post(url, json=messages, timeout=20)
+                try:
+                    text = resp.text
+                except Exception:
+                    text = ""
+                if resp.status_code >= 400:
+                    logger.warning("push_send_failed status=%s resp=%s", resp.status_code, text[:500])
+                else:
+                    # attempt to parse tickets and receipts to log delivery results
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        data = None
+                    ticket_ids = []
+                    entries = data.get("data") if isinstance(data, dict) and data.get("data") else data
+                    if isinstance(entries, list):
+                        for entry in entries:
+                            tid = entry.get("id") or entry.get("ticket_id")
+                            if tid:
+                                ticket_ids.append(tid)
+                    if ticket_ids:
+                        receipts_url = getattr(
+                            settings, "EXPO_PUSH_RECEIPT_URL", "https://exp.host/--/api/v2/push/getReceipts"
+                        )
+                        try:
+                            import time
+
+                            time.sleep(1)
+                            receipts_resp = requests.post(receipts_url, json={"ids": ticket_ids}, timeout=20)
+                            if receipts_resp.status_code >= 400:
+                                logger.warning(
+                                    "push_receipts_failed status=%s resp=%s",
+                                    receipts_resp.status_code,
+                                    receipts_resp.text[:500],
+                                )
+                            else:
+                                try:
+                                    receipts = receipts_resp.json()
+                                except Exception:
+                                    receipts = None
+                                if isinstance(receipts, dict):
+                                    for tid, receipt in receipts.items():
+                                        if not receipt:
+                                            continue
+                                        if receipt.get("status") == "ok":
+                                            logger.info("push_receipt_ok id=%s", tid)
+                                        else:
+                                            logger.warning("push_receipt_error id=%s details=%s", tid, receipt)
+                        except Exception as exc:  # pragma: no cover - defensive
+                            logger.warning("push_receipt_exception %s", exc)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("push_send_exception %s", exc)
 
     @staticmethod
     def send_monthly_report_email(report: dict, subject: str, recipients: list[str]) -> None:

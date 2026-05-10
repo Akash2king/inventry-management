@@ -7,6 +7,33 @@ from rest_framework.response import Response
 
 from apps.notifications.models import UserNotification
 from apps.notifications.serializers import UserNotificationSerializer
+from apps.notifications.serializers import NotificationDeviceSerializer
+from apps.notifications.models import NotificationDevice
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+
+
+class NotificationDeviceRegisterView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = NotificationDeviceSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        token = serializer.validated_data.get("token")
+        platform = serializer.validated_data.get("platform") or ""
+        obj, created = NotificationDevice.objects.update_or_create(
+            user=request.user, token=token, defaults={"platform": platform, "last_seen_at": timezone.now()},
+        )
+        return Response(NotificationDeviceSerializer(obj).data, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        token = request.data.get("token") or request.query_params.get("token")
+        if not token:
+            return Response({"detail": "token required"}, status=status.HTTP_400_BAD_REQUEST)
+        NotificationDevice.objects.filter(user=request.user, token=token).delete()
+        return Response({"detail": "deleted"}, status=status.HTTP_200_OK)
 
 
 class UserNotificationPagination(PageNumberPagination):
@@ -60,6 +87,24 @@ class UserNotificationMarkReadView(generics.GenericAPIView):
             note.save(update_fields=["read_at"])
         return Response(UserNotificationSerializer(note).data)
 
+
+
+class SendTestPushView(APIView):
+    """Send a test push to the current user's registered devices.
+
+    POST body (optional): { "title": "...", "body": "..." }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        title = request.data.get("title") or "Test notification"
+        body = request.data.get("body") or "This is a test push from the server."
+        try:
+            NotificationService.send_push_to_users([request.user], title, body, metadata={"test": True})
+            return Response({"detail": "push queued"}, status=status.HTTP_202_ACCEPTED)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

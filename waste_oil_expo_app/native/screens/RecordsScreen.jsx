@@ -285,6 +285,14 @@ export function RecordsScreen({ navigation }) {
             {user?.full_name || user?.username || "—"}
           </Text>
         </View>
+        {user?.role === "storeman" && !user?.must_change_password ? (
+          <TouchableOpacity
+            style={styles.headerNewBtn}
+            onPress={() => navigation.getParent()?.navigate("RecordForm", { mode: "create" })}
+          >
+            <Text style={styles.headerNewBtnText}>New</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.actionsRow}>
@@ -305,14 +313,7 @@ export function RecordsScreen({ navigation }) {
           </TouchableOpacity>
         ) : null}
 
-        {user?.role === "storeman" && !user?.must_change_password ? (
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.getParent()?.navigate("RecordForm", { mode: "create" })}
-          >
-            <Text style={styles.headerBtnText}>New</Text>
-          </TouchableOpacity>
-        ) : null}
+        {/* New button moved to header for top-right placement */}
 
         <TouchableOpacity style={styles.headerBtn} onPress={() => setShowFilters((s) => !s)}>
           <View style={styles.headerBtnInner}>
@@ -716,6 +717,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: "rgba(22, 163, 74, 0.20)",
+  },
+  headerNewBtn: {
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: theme.radius.md,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+  },
+  headerNewBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
   },
   headerBtnInner: { flexDirection: "row", alignItems: "center", gap: 6 },
   headerBtnText: {

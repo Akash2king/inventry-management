@@ -210,7 +210,11 @@ export function RecordList() {
             {exportBusy ? "Exporting…" : "Export Excel"}
           </button>
           {user?.role === "storeman" && !user?.must_change_password ? (
-            <button type="button" className="btn btn-primary" onClick={() => navigate("/records/new")}>
+            <button
+              type="button"
+              className="btn btn-primary btn-new-record"
+              onClick={() => navigate("/records/new")}
+            >
               New Record
             </button>
           ) : null}

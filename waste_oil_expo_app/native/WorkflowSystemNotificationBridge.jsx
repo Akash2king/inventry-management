@@ -6,6 +6,7 @@ import {
   presentWorkflowLocalNotification,
   setAppBadgeCountSafe,
 } from "./systemNotifications.js";
+import { registerWorkflowPushToken } from "./systemNotifications.js";
 
 const POLL_MS = 60_000;
 const PUSH_COOLDOWN_MS = 45_000;
@@ -58,18 +59,34 @@ export function WorkflowSystemNotificationBridge() {
     }
 
     void configureWorkflowNotifications().catch(() => {});
+    // Register push token with backend so server can send remote pushes when app is closed.
+    // Re-register on mount and when app becomes active to refresh tokens when needed.
+    const doRegister = async () => {
+      try {
+        await registerWorkflowPushToken(api);
+      } catch {}
+    };
+    void doRegister();
     void tick();
 
     const interval = setInterval(tick, POLL_MS);
-    const sub = AppState.addEventListener("change", (state) => {
+    // Re-run tick and re-register token when app becomes active.
+    const onAppState = (state) => {
       if (state === "active") {
         void tick();
+        void doRegister();
       }
-    });
+    };
+    const sub = AppState.addEventListener("change", onAppState);
+
+    // Periodically refresh token every 6 hours as a best-effort
+    const REFRESH_TOKEN_MS = 6 * 60 * 60 * 1000;
+    const refreshInterval = setInterval(() => void doRegister(), REFRESH_TOKEN_MS);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
+      clearInterval(refreshInterval);
       sub.remove();
     };
   }, [api, user]);

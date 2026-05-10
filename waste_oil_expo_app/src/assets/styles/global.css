@@ -1938,6 +1938,23 @@ table.data-table tbody tr:hover {
   font-size: 0.9rem;
 }
 
+/* Mobile: place New button at top-right of the records header */
+@media (max-width: 640px) {
+  .page-records__head {
+    position: relative;
+  }
+  .page-records__head .btn-new-record {
+    position: absolute;
+    top: 0.25rem;
+    right: 0;
+    z-index: 5;
+  }
+  /* prevent title overlapping the absolute button */
+  .page-records__title {
+    margin-right: 4.25rem;
+  }
+}
+
 .record-list-filter-banner {
   display: flex;
   align-items: center;

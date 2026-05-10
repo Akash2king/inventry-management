@@ -383,17 +383,22 @@ export function DashboardScreen({ navigation }) {
                     >
                       <Ionicons name="notifications-outline" size={18} color={theme.colors.textBright} />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate("SettingsTab")}
-                      style={styles.brandAvatar}
-                      accessibilityRole="button"
-                      accessibilityLabel="Open Settings"
-                      hitSlop={10}
-                    >
-                      <Text style={styles.brandAvatarText}>
-                        {(user?.full_name || user?.username || "U").slice(0, 2).toUpperCase()}
+                    <View style={styles.userInfoWrap}>
+                      <Text style={styles.usernameText} numberOfLines={1}>
+                        {user?.username || user?.full_name || "User"}
                       </Text>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => navigation.navigate("SettingsTab")}
+                        style={styles.brandAvatar}
+                        accessibilityRole="button"
+                        accessibilityLabel="Open Settings"
+                        hitSlop={10}
+                      >
+                        <Text style={styles.brandAvatarText}>
+                          {(user?.full_name || user?.username || "U").slice(0, 2).toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   <View style={styles.heroDivider} />
@@ -717,6 +722,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceMuted,
+  },
+  userInfoWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  usernameText: {
+    fontSize: 13,
+    color: theme.colors.textBright,
+    fontWeight: "700",
+    maxWidth: 120,
+    textAlign: "right",
   },
   brandLogo: {
     width: "100%",

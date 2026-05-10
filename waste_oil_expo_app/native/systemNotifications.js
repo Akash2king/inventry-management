@@ -4,9 +4,11 @@
  */
 
 import { AppState, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 
 const ANDROID_CHANNEL_ID = "workflow-notifications";
+const LS_PUSH_TOKEN = "wom_push_token";
 
 /** Expo Go cannot load expo-notifications on Android (SDK 53+). */
 export function isExpoPushRuntimeSupported() {
@@ -93,6 +95,80 @@ export async function requestWorkflowNotificationPermissions() {
     },
   });
   return { status: asked.status };
+}
+
+/**
+ * Register device push token with backend so server can send remote push notifications.
+ * Returns the token string or null.
+ */
+export async function registerWorkflowPushToken(api) {
+  if (!isExpoPushRuntimeSupported()) return null;
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
+
+  try {
+    await configureWorkflowNotifications();
+    const perm = await Notifications.getPermissionsAsync();
+    if (perm.status !== "granted") {
+      const asked = await Notifications.requestPermissionsAsync();
+      if (asked.status !== "granted") return null;
+    }
+
+    // Expo push token (suitable for Expo push service) or device push token
+    let tokenObj = null;
+    try {
+      tokenObj = await Notifications.getExpoPushTokenAsync();
+    } catch (e) {
+      try {
+        tokenObj = await Notifications.getDevicePushTokenAsync();
+      } catch (err) {
+        tokenObj = null;
+      }
+    }
+    const token = tokenObj?.data || tokenObj?.token || null;
+    if (!token) return null;
+
+    // persist locally
+    try {
+      await AsyncStorage.setItem(LS_PUSH_TOKEN, token);
+    } catch {}
+
+    // Send to backend if API provided
+    try {
+      if (api && api.notifications && typeof api.notifications.registerDevice === "function") {
+        await api.notifications.registerDevice({ token, platform: Platform.OS });
+      }
+    } catch (e) {
+      /* ignore backend errors */
+    }
+
+    return token;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function unregisterWorkflowPushToken(api) {
+  try {
+    const token = await AsyncStorage.getItem(LS_PUSH_TOKEN);
+    if (!token) return null;
+    try {
+      if (api && api.notifications) {
+        if (typeof api.notifications.unregisterDevice === "function") {
+          await api.notifications.unregisterDevice(token);
+        } else if (typeof api.notifications.registerDevice === "function") {
+          // fallback: attempt POST /devices/ with intention to delete (some servers support method override)
+          await api.notifications.registerDevice({ token, _delete: true });
+        }
+      }
+    } catch {}
+    try {
+      await AsyncStorage.removeItem(LS_PUSH_TOKEN);
+    } catch {}
+    return token;
+  } catch {
+    return null;
+  }
 }
 
 export async function presentWorkflowLocalNotification({ title, body }) {
