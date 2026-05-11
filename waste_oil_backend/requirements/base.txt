@@ -8,3 +8,4 @@ redis>=5.0
 celery>=5.4,<6
 djangorestframework-simplejwt>=5.3
 reportlab>=4.0,<5
+google-auth>=2.29.0

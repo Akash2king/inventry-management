@@ -141,12 +141,9 @@ _DEFAULT_CORS_DEV_ORIGINS = [
 ]
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_cors_from_env + _DEFAULT_CORS_DEV_ORIGINS))
 
-# In production the packaged Tauri app uses a custom scheme (tauri://localhost),
-# which django-cors-headers cannot express via CORS_ALLOWED_ORIGINS (it expects
-# http/https). For this internal desktop deployment we allow all origins by
-# default, controlled by an env flag if you ever need to tighten it.
-if os.environ.get("CORS_ALLOW_ALL_ORIGINS", "true").lower() in ("1", "true", "yes"):
-    CORS_ALLOW_ALL_ORIGINS = True
+# Packaged desktop (tauri://) and varied LAN clients cannot be listed exhaustively as
+# http/https origins. Reflect any request Origin on preflight and credentialed calls.
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Tauri / browser clients send X-Session-Id on JWT requests; it is not in corsheaders'
 # default allow-list, so preflight fails with "Failed to fetch" while React Native (Expo)
@@ -233,6 +230,13 @@ EMAIL_NOTIFICATIONS_ENABLED = (
     os.environ.get("EMAIL_NOTIFICATIONS_ENABLED", "true").lower()
     in ("1", "true", "yes")
 )
+
+# Mobile workflow pushes — Firebase Cloud Messaging HTTP v1 only (no Expo Push Service).
+# Set FCM_SERVICE_ACCOUNT_FILE to the path of your Firebase service account JSON
+# (Project settings → Service accounts → Generate new private key).
+FCM_ENABLED = os.environ.get("FCM_ENABLED", "false").lower() in ("1", "true", "yes")
+FCM_SERVICE_ACCOUNT_FILE = os.environ.get("FCM_SERVICE_ACCOUNT_FILE", "").strip()
+FCM_SERVICE_ACCOUNT_JSON = os.environ.get("FCM_SERVICE_ACCOUNT_JSON", "").strip()
 
 try:
     import config.celery  # noqa: F401 — register Celery app and task modules

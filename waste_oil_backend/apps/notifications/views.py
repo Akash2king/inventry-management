@@ -12,7 +12,10 @@ from apps.notifications.models import NotificationDevice
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
-from apps.notifications.in_app import broadcast_user_notification, mirror_email_as_user_notification
+from apps.notifications.in_app import (
+    broadcast_user_notification,
+    mirror_email_as_user_notification_and_push,
+)
 from apps.accounts.models import CustomUser
 from apps.accounts.permissions import IsManagerOrAbove
 
@@ -104,7 +107,7 @@ class SendTestPushView(APIView):
         title = request.data.get("title") or "Test notification"
         body = request.data.get("body") or "This is a test push from the server."
         try:
-            note = mirror_email_as_user_notification(
+            note = mirror_email_as_user_notification_and_push(
                 request.user,
                 kind=UserNotification.Kind.WELCOME_EMPLOYEE,
                 email_subject=title,

@@ -1,3 +1,5 @@
+import logging
+
 from celery import shared_task
 from django.contrib.auth import get_user_model
 
@@ -5,28 +7,17 @@ from apps.records.models import WasteOilRecord
 
 from .services import NotificationService
 
-import logging
-
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
 @shared_task(name="notifications.send_pushes")
 def send_pushes_task(user_ids, title, body, metadata=None):
-    """Backend-only notification task.
-
-    The mobile app polls the backend and creates local notifications itself,
-    so this task only logs the intended delivery for debugging.
-    """
+    """Deliver workflow pushes (FCM HTTP v1 for Android device tokens)."""
     try:
-        logger.info(
-            "backend_only_push_task users=%s title=%s body=%s metadata_keys=%s",
-            user_ids,
-            title,
-            body,
-            sorted((metadata or {}).keys()),
-        )
-        return {"sent": 0, "backend_only": True}
+        users = list(User.objects.filter(pk__in=user_ids))
+        NotificationService.send_push_to_users(users, title, body, metadata or {})
+        return {"users": len(users), "ok": True}
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("send_pushes_task failed: %s", exc)
         return {"sent": 0, "error": str(exc)}

@@ -46,6 +46,7 @@
       ],
       "expo-font",
       "expo-notifications",
+      "expo-background-fetch",
       "@react-native-community/datetimepicker"
     ],
     "extra": {

@@ -77,10 +77,14 @@ def mirror_email_as_user_notification_and_push(
     )
     if note is not None:
         try:
-            # Import here to avoid circular imports at module import time
-            from apps.notifications.services import NotificationService
+            from apps.notifications.tasks import send_pushes_task
 
-            NotificationService.send_push_to_users([user], note.title, note.body, metadata or {})
+            send_pushes_task.delay(
+                [user.pk],
+                note.title,
+                note.body,
+                metadata or {},
+            )
         except Exception:
             logger.warning("push_send_failed for user=%s", getattr(user, "pk", None))
     return note
@@ -96,6 +100,7 @@ def broadcast_user_notification(
 ) -> list[UserNotification]:
     """Create the same notification for many users."""
     created: list[UserNotification] = []
+    push_users: list = []
     for user in users or []:
         note = mirror_email_as_user_notification(
             user,
@@ -106,6 +111,19 @@ def broadcast_user_notification(
         )
         if note is not None:
             created.append(note)
+            push_users.append(user)
+    if push_users:
+        try:
+            from apps.notifications.tasks import send_pushes_task
+
+            send_pushes_task.delay(
+                [u.pk for u in push_users],
+                title,
+                body,
+                metadata or {},
+            )
+        except Exception:
+            logger.warning("broadcast_push_failed", exc_info=True)
     return created
 
 

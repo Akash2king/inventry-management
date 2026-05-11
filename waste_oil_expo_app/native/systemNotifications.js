@@ -3,19 +3,25 @@
  * Uses expo-notifications outside Expo Go — SDK 53+ removed Android APIs from Expo Go.
  */
 
-import { AppState, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 
 const ANDROID_CHANNEL_ID = "workflow-notifications";
 const LS_PUSH_TOKEN = "wom_push_token";
 
-function getExpoProjectId() {
-  return (
-    Constants?.expoConfig?.extra?.eas?.projectId ||
-    Constants?.easConfig?.projectId ||
-    null
-  );
+function promiseNotificationRationale() {
+  return new Promise((resolve) => {
+    Alert.alert(
+      "Turn on notifications",
+      "Chem-Solv Inventory can show workflow alerts in your notification shade when the app is closed. This uses Firebase on your own backend (not Expo’s push servers). On Android, also allow unrestricted battery for this app in system settings if alerts are delayed.",
+      [
+        { text: "Not now", style: "cancel", onPress: () => resolve(false) },
+        { text: "Continue", onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
 }
 
 /** Expo Go cannot load expo-notifications on Android (SDK 53+). */
@@ -120,23 +126,26 @@ export async function registerWorkflowPushToken(api) {
     await configureWorkflowNotifications();
     const perm = await Notifications.getPermissionsAsync();
     if (perm.status !== "granted") {
-      const asked = await Notifications.requestPermissionsAsync();
+      const go = await promiseNotificationRationale();
+      if (!go) {
+        return null;
+      }
+      const asked = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
       if (asked.status !== "granted") return null;
     }
 
-    // Expo push token (suitable for Expo push service) or device push token
+    // Native FCM device token (Android). Backend sends via Firebase HTTP v1 — not Expo Push Service.
     let tokenObj = null;
     try {
-      const projectId = getExpoProjectId();
-      tokenObj = await Notifications.getExpoPushTokenAsync(
-        projectId ? { projectId } : undefined,
-      );
-    } catch (e) {
-      try {
-        tokenObj = await Notifications.getDevicePushTokenAsync();
-      } catch (err) {
-        tokenObj = null;
-      }
+      tokenObj = await Notifications.getDevicePushTokenAsync();
+    } catch {
+      tokenObj = null;
     }
     const token = tokenObj?.data || tokenObj?.token || null;
     if (!token) return null;

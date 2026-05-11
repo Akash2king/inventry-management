@@ -5,13 +5,13 @@ from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+from apps.notifications.fcm_push import is_expo_legacy_push_token, send_fcm_display_message
 from apps.notifications.in_app import (
     mirror_email_as_user_notification,
     mirror_email_to_users,
     users_from_email_recipients,
 )
-from django.conf import settings
-from apps.notifications.models import UserNotification
+from apps.notifications.models import NotificationDevice, UserNotification
 from apps.records.models import WasteOilRecord
 
 logger = logging.getLogger(__name__)
@@ -368,20 +368,66 @@ class NotificationService:
 
     @staticmethod
     def send_push_to_users(users: list, title: str, body: str, metadata: dict | None = None) -> None:
-        """Keep notification delivery backend-only.
-
-        The mobile app polls the backend and shows local notifications itself,
-        so this hook only logs the intended delivery instead of calling Expo.
-        """
+        """Send FCM display notifications (works when the app is closed). Requires FCM_* settings."""
         user_ids = [getattr(u, "id", getattr(u, "pk", None)) for u in users if u]
+        uid_set = {x for x in user_ids if x}
+        meta = metadata or {}
+        if not uid_set:
+            return
+
+        rows = NotificationDevice.objects.filter(user_id__in=uid_set).values("token", "platform")
+        seen: set[str] = set()
+        android_tokens: list[str] = []
+        skipped_legacy = 0
+        skipped_ios = 0
+        for row in rows:
+            tok = (row.get("token") or "").strip()
+            if not tok or tok in seen:
+                continue
+            if is_expo_legacy_push_token(tok):
+                skipped_legacy += 1
+                continue
+            plat = (row.get("platform") or "").strip().lower()
+            if plat == "ios":
+                skipped_ios += 1
+                continue
+            if plat and plat not in ("android", ""):
+                logger.debug("push_skip_unknown_platform platform=%s", plat)
+                continue
+            seen.add(tok)
+            android_tokens.append(tok)
+
+        if skipped_legacy:
+            logger.info(
+                "push_skipped_expo_legacy_tokens count=%s (reinstall app after FCM migration)",
+                skipped_legacy,
+            )
+        if skipped_ios:
+            logger.info(
+                "push_skipped_ios count=%s (FCM path targets Android native tokens only)",
+                skipped_ios,
+            )
+
+        if not android_tokens:
+            logger.info(
+                "push_no_fcm_android_tokens users=%s title=%s",
+                sorted(uid_set),
+                (title or "")[:80],
+            )
+            return
+
+        sent = 0
+        for tok in android_tokens:
+            if send_fcm_display_message(token=tok, title=title, body=body, data=meta):
+                sent += 1
+
         logger.info(
-            "backend_only_notification users=%s title=%s body=%s metadata_keys=%s",
-            user_ids,
-            title,
-            body,
-            sorted((metadata or {}).keys()),
+            "push_fcm_finished users=%s devices=%s sent_ok=%s title=%s",
+            sorted(uid_set),
+            len(android_tokens),
+            sent,
+            (title or "")[:80],
         )
-        return None
 
     @staticmethod
     def send_monthly_report_email(report: dict, subject: str, recipients: list[str]) -> None:

@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { AuthProvider, AuthGate, useAuth } from "./AuthContext.jsx";
+import { registerWorkflowBackgroundFetchSafe } from "./registerBackgroundTasks.js";
 import { WorkflowSystemNotificationBridge } from "./WorkflowSystemNotificationBridge.jsx";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "./theme.js";
@@ -243,6 +244,10 @@ function Inner() {
 }
 
 export default function NativeRoot() {
+  useEffect(() => {
+    void registerWorkflowBackgroundFetchSafe();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <AuthProvider>

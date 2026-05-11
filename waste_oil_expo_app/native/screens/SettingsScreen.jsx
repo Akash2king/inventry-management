@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   Alert,
+  Linking,
   Platform,
   ScrollView,
   StatusBar,
@@ -14,6 +15,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { saveApiBase, suggestLanPlaceholder } from "../apiConfig.js";
 import { useAuth } from "../AuthContext.jsx";
+import {
+  registerWorkflowPushToken,
+  requestWorkflowNotificationPermissions,
+} from "../systemNotifications.js";
 import { theme } from "../theme.js";
 
 function ActionRow({ icon, label, onPress, danger }) {
@@ -33,7 +38,7 @@ function ActionRow({ icon, label, onPress, danger }) {
 }
 
 export function SettingsScreen({ navigation }) {
-  const { apiBase, applyApiBase, user, logout } = useAuth();
+  const { apiBase, applyApiBase, user, logout, api } = useAuth();
   const [url, setUrl] = useState(apiBase || "");
   const [saving, setSaving] = useState(false);
 
@@ -133,6 +138,44 @@ export function SettingsScreen({ navigation }) {
               label="Workflow notifications"
               onPress={() => navigation.navigate("InAppNotifications")}
             />
+
+            <ActionRow
+              icon="megaphone-outline"
+              label="Re-request push permission"
+              onPress={() => {
+                void (async () => {
+                  await requestWorkflowNotificationPermissions();
+                  if (api) {
+                    await registerWorkflowPushToken(api);
+                  }
+                  Alert.alert(
+                    "Notifications",
+                    "If the system denied access earlier, open system settings for this app and enable notifications.",
+                    [
+                      { text: "OK", style: "default" },
+                      { text: "Open settings", onPress: () => void Linking.openSettings() },
+                    ],
+                  );
+                })();
+              }}
+            />
+
+            {Platform.OS === "android" ? (
+              <ActionRow
+                icon="battery-charging-outline"
+                label="Battery & background (Android)"
+                onPress={() => {
+                  Alert.alert(
+                    "Reliable background delivery",
+                    "Open App info → Battery (or Power) and set this app to Unrestricted. That helps background inbox checks and avoids delayed alerts on some devices.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Open app settings", onPress: () => void Linking.openSettings() },
+                    ],
+                  );
+                }}
+              />
+            ) : null}
 
             {user.role === "manager" || user.role === "gm" || user.role === "superadmin" ? (
               <ActionRow
