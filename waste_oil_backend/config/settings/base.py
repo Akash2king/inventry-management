@@ -231,12 +231,10 @@ EMAIL_NOTIFICATIONS_ENABLED = (
     in ("1", "true", "yes")
 )
 
-# Mobile workflow pushes — Firebase Cloud Messaging HTTP v1 only (no Expo Push Service).
-# Set FCM_SERVICE_ACCOUNT_FILE to the path of your Firebase service account JSON
-# (Project settings → Service accounts → Generate new private key).
-FCM_ENABLED = os.environ.get("FCM_ENABLED", "false").lower() in ("1", "true", "yes")
-FCM_SERVICE_ACCOUNT_FILE = os.environ.get("FCM_SERVICE_ACCOUNT_FILE", "").strip()
-FCM_SERVICE_ACCOUNT_JSON = os.environ.get("FCM_SERVICE_ACCOUNT_JSON", "").strip()
+# Mobile workflow pushes — Expo Push API (https://docs.expo.dev/push-notifications/sending-notifications/).
+# Optional: EXPO_ACCESS_TOKEN from https://expo.dev/accounts/<account>/settings/access-tokens
+EXPO_PUSH_ENABLED = os.environ.get("EXPO_PUSH_ENABLED", "true").lower() in ("1", "true", "yes")
+EXPO_ACCESS_TOKEN = os.environ.get("EXPO_ACCESS_TOKEN", "").strip()
 
 try:
     import config.celery  # noqa: F401 — register Celery app and task modules

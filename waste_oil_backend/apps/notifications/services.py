@@ -5,7 +5,12 @@ from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
-from apps.notifications.fcm_push import is_expo_legacy_push_token, send_fcm_display_message
+from apps.notifications.expo_push import (
+    ANDROID_NOTIFICATION_CHANNEL_ID,
+    expo_push_data_for_navigation,
+    is_expo_push_token,
+    send_expo_push_batch,
+)
 from apps.notifications.in_app import (
     mirror_email_as_user_notification,
     mirror_email_to_users,
@@ -368,63 +373,71 @@ class NotificationService:
 
     @staticmethod
     def send_push_to_users(users: list, title: str, body: str, metadata: dict | None = None) -> None:
-        """Send FCM display notifications (works when the app is closed). Requires FCM_* settings."""
+        """Send tray notifications via Expo Push (Android + iOS). Requires EXPO_PUSH_ENABLED."""
         user_ids = [getattr(u, "id", getattr(u, "pk", None)) for u in users if u]
         uid_set = {x for x in user_ids if x}
         meta = metadata or {}
         if not uid_set:
             return
 
+        if not getattr(settings, "EXPO_PUSH_ENABLED", True):
+            logger.info("expo_push_disabled skip users=%s", sorted(uid_set))
+            return
+
+        data_payload = expo_push_data_for_navigation(meta)
+
         rows = NotificationDevice.objects.filter(user_id__in=uid_set).values("token", "platform")
         seen: set[str] = set()
-        android_tokens: list[str] = []
-        skipped_legacy = 0
-        skipped_ios = 0
+        targets: list[tuple[str, str]] = []
+        skipped_non_expo = 0
         for row in rows:
             tok = (row.get("token") or "").strip()
             if not tok or tok in seen:
                 continue
-            if is_expo_legacy_push_token(tok):
-                skipped_legacy += 1
+            if not is_expo_push_token(tok):
+                skipped_non_expo += 1
                 continue
             plat = (row.get("platform") or "").strip().lower()
-            if plat == "ios":
-                skipped_ios += 1
-                continue
-            if plat and plat not in ("android", ""):
+            if plat and plat not in ("android", "ios", ""):
                 logger.debug("push_skip_unknown_platform platform=%s", plat)
                 continue
             seen.add(tok)
-            android_tokens.append(tok)
+            targets.append((tok, plat))
 
-        if skipped_legacy:
+        if skipped_non_expo:
             logger.info(
-                "push_skipped_expo_legacy_tokens count=%s (reinstall app after FCM migration)",
-                skipped_legacy,
-            )
-        if skipped_ios:
-            logger.info(
-                "push_skipped_ios count=%s (FCM path targets Android native tokens only)",
-                skipped_ios,
+                "push_skipped_non_expo_tokens count=%s (register Expo push token from the app)",
+                skipped_non_expo,
             )
 
-        if not android_tokens:
+        if not targets:
             logger.info(
-                "push_no_fcm_android_tokens users=%s title=%s",
+                "push_no_expo_tokens users=%s title=%s",
                 sorted(uid_set),
                 (title or "")[:80],
             )
             return
 
-        sent = 0
-        for tok in android_tokens:
-            if send_fcm_display_message(token=tok, title=title, body=body, data=meta):
-                sent += 1
+        messages: list[dict] = []
+        for tok, plat in targets:
+            msg: dict = {
+                "to": tok,
+                "title": (title or "")[:200],
+                "body": (body or "")[:4000],
+                "sound": "default",
+                "priority": "high",
+                "data": data_payload,
+            }
+            if plat == "android":
+                msg["channelId"] = ANDROID_NOTIFICATION_CHANNEL_ID
+            messages.append(msg)
+
+        sent = send_expo_push_batch(messages)
 
         logger.info(
-            "push_fcm_finished users=%s devices=%s sent_ok=%s title=%s",
+            "push_expo_finished users=%s devices=%s tickets_ok=%s title=%s",
             sorted(uid_set),
-            len(android_tokens),
+            len(targets),
             sent,
             (title or "")[:80],
         )

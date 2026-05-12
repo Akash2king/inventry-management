@@ -79,11 +79,13 @@ def mirror_email_as_user_notification_and_push(
         try:
             from apps.notifications.tasks import send_pushes_task
 
+            push_meta = dict(metadata or {})
+            push_meta.setdefault("kind", kind)
             send_pushes_task.delay(
                 [user.pk],
                 note.title,
                 note.body,
-                metadata or {},
+                push_meta,
             )
         except Exception:
             logger.warning("push_send_failed for user=%s", getattr(user, "pk", None))
@@ -120,7 +122,7 @@ def broadcast_user_notification(
                 [u.pk for u in push_users],
                 title,
                 body,
-                metadata or {},
+                {**(metadata or {}), "kind": kind},
             )
         except Exception:
             logger.warning("broadcast_push_failed", exc_info=True)

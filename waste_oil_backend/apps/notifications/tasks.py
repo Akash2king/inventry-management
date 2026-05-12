@@ -13,7 +13,7 @@ User = get_user_model()
 
 @shared_task(name="notifications.send_pushes")
 def send_pushes_task(user_ids, title, body, metadata=None):
-    """Deliver workflow pushes (FCM HTTP v1 for Android device tokens)."""
+    """Deliver workflow pushes via Expo Push (Expo push tokens; Android + iOS)."""
     try:
         users = list(User.objects.filter(pk__in=user_ids))
         NotificationService.send_push_to_users(users, title, body, metadata or {})

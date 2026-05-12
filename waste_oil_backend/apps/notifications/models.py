@@ -50,7 +50,7 @@ class UserNotification(models.Model):
 
 
 class NotificationDevice(models.Model):
-    """Device push tokens registered for a user (FCM on Android; iOS reserved for future APNs)."""
+    """Device push tokens registered for a user (Expo push tokens for remote tray notifications)."""
 
     id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(

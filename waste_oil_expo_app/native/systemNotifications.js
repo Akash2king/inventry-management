@@ -14,7 +14,7 @@ function promiseNotificationRationale() {
   return new Promise((resolve) => {
     Alert.alert(
       "Turn on notifications",
-      "Chem-Solv Inventory can show workflow alerts in your notification shade when the app is closed. This uses Firebase on your own backend (not Expo’s push servers). On Android, also allow unrestricted battery for this app in system settings if alerts are delayed.",
+      "Chem-Solv Inventory can show workflow alerts in your notification shade when the app is closed. The server sends these via Expo Push. On Android, allow unrestricted battery for this app in system settings if alerts are delayed.",
       [
         { text: "Not now", style: "cancel", onPress: () => resolve(false) },
         { text: "Continue", onPress: () => resolve(true) },
@@ -140,14 +140,17 @@ export async function registerWorkflowPushToken(api) {
       if (asked.status !== "granted") return null;
     }
 
-    // Native FCM device token (Android). Backend sends via Firebase HTTP v1 — not Expo Push Service.
+    // Expo push token (Android + iOS). Backend sends via Expo Push API.
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     let tokenObj = null;
     try {
-      tokenObj = await Notifications.getDevicePushTokenAsync();
+      tokenObj = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined,
+      );
     } catch {
       tokenObj = null;
     }
-    const token = tokenObj?.data || tokenObj?.token || null;
+    const token = tokenObj?.data || null;
     if (!token) return null;
 
     // persist locally

@@ -1,5 +1,7 @@
 import React, { useEffect } from "react";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { navigationRef } from "./navigationRef.js";
+import { PushNotificationDeeplink } from "./PushNotificationDeeplink.jsx";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -236,7 +238,8 @@ function Inner() {
   return (
     <>
       <StatusBar style="dark" />
-      <NavigationContainer theme={NavTheme}>
+      <NavigationContainer ref={navigationRef} theme={NavTheme}>
+        <PushNotificationDeeplink />
         <AppStack />
       </NavigationContainer>
     </>
