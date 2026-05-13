@@ -1,4 +1,5 @@
 import { Link, Outlet } from "react-router-dom";
+import { useEffect } from "react";
 import { Sidebar } from "./Sidebar.jsx";
 import { Header } from "./Header.jsx";
 import { useUiStore } from "@/store/uiStore.js";
@@ -6,7 +7,19 @@ import { useAuthStore } from "@/store/authStore.js";
 
 export function Layout() {
   const pageRefreshNonce = useUiStore((s) => s.pageRefreshNonce);
+  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const mustChange = useAuthStore((s) => Boolean(s.user?.must_change_password));
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 1100) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [setSidebarOpen]);
+
   return (
     <div className="app-shell">
       <Sidebar />

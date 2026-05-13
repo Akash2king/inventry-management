@@ -10,10 +10,7 @@ import { ActivityIndicator, Platform, View } from "react-native";
 import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
-import {
-  registerWorkflowPushToken,
-  unregisterWorkflowPushToken,
-} from "./systemNotifications.js";
+import { unregisterWorkflowPushToken } from "./systemNotifications.js";
 
 const AuthCtx = createContext(null);
 
@@ -68,14 +65,6 @@ export function AuthProvider({ children }) {
       cancelled = true;
     };
   }, [api]);
-
-  useEffect(() => {
-    if (!api || !user) {
-      return undefined;
-    }
-    void registerWorkflowPushToken(api);
-    return undefined;
-  }, [api, user]);
 
   const applyApiBase = useCallback(async (nextBase) => {
     const b = String(nextBase || "")

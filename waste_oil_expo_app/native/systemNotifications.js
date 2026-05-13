@@ -6,6 +6,7 @@
 import { Alert, AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import * as Device from "expo-device";
 
 const ANDROID_CHANNEL_ID = "workflow-notifications";
 const LS_PUSH_TOKEN = "wom_push_token";
@@ -34,6 +35,42 @@ export function isExpoPushRuntimeSupported() {
 
 let notificationsPromise = null;
 let handlerRegistered = false;
+
+function resolveExpoProjectId() {
+  return (
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId ??
+    null
+  );
+}
+
+function bumpNotificationsChanged() {
+  if (typeof globalThis !== "undefined" && typeof globalThis.dispatchEvent === "function") {
+    globalThis.dispatchEvent(new CustomEvent("wom:notifications-changed"));
+  }
+}
+
+async function persistPushToken(token) {
+  if (!token) {
+    return;
+  }
+  try {
+    await AsyncStorage.setItem(LS_PUSH_TOKEN, token);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function registerDeviceWithBackend(api, token) {
+  if (!api?.notifications?.registerDevice || !token) {
+    return;
+  }
+  try {
+    await api.notifications.registerDevice({ token, platform: Platform.OS });
+  } catch {
+    /* ignore backend errors */
+  }
+}
 
 async function getNotifications() {
   if (!isExpoPushRuntimeSupported()) {
@@ -119,6 +156,7 @@ export async function requestWorkflowNotificationPermissions() {
  */
 export async function registerWorkflowPushToken(api) {
   if (!isExpoPushRuntimeSupported()) return null;
+  if (!Device.isDevice) return null;
   const Notifications = await getNotifications();
   if (!Notifications) return null;
 
@@ -140,37 +178,79 @@ export async function registerWorkflowPushToken(api) {
       if (asked.status !== "granted") return null;
     }
 
-    // Expo push token (Android + iOS). Backend sends via Expo Push API.
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId = resolveExpoProjectId();
+    if (!projectId) {
+      return null;
+    }
+
     let tokenObj = null;
     try {
-      tokenObj = await Notifications.getExpoPushTokenAsync(
-        projectId ? { projectId } : undefined,
-      );
+      tokenObj = await Notifications.getExpoPushTokenAsync({ projectId });
     } catch {
       tokenObj = null;
     }
     const token = tokenObj?.data || null;
     if (!token) return null;
 
-    // persist locally
-    try {
-      await AsyncStorage.setItem(LS_PUSH_TOKEN, token);
-    } catch {}
-
-    // Send to backend if API provided
-    try {
-      if (api && api.notifications && typeof api.notifications.registerDevice === "function") {
-        await api.notifications.registerDevice({ token, platform: Platform.OS });
-      }
-    } catch (e) {
-      /* ignore backend errors */
-    }
-
+    await persistPushToken(token);
+    await registerDeviceWithBackend(api, token);
     return token;
-  } catch (e) {
+  } catch {
     return null;
   }
+}
+
+/**
+ * Expo push setup: permissions, Android channel, token registration, and listeners.
+ * Returns a cleanup function.
+ */
+export async function startWorkflowPushRegistration(api) {
+  if (!api || !isExpoPushRuntimeSupported() || !Device.isDevice) {
+    return () => {};
+  }
+
+  const Notifications = await getNotifications();
+  if (!Notifications) {
+    return () => {};
+  }
+
+  await configureWorkflowNotifications();
+  await registerWorkflowPushToken(api);
+
+  const cleanupFns = [];
+
+  if (typeof Notifications.addPushTokenListener === "function") {
+    const tokenSub = Notifications.addPushTokenListener((event) => {
+      const token = event?.data;
+      if (!token) {
+        return;
+      }
+      void persistPushToken(token);
+      void registerDeviceWithBackend(api, token);
+    });
+    if (tokenSub && typeof tokenSub.remove === "function") {
+      cleanupFns.push(() => tokenSub.remove());
+    }
+  }
+
+  if (typeof Notifications.addNotificationReceivedListener === "function") {
+    const receivedSub = Notifications.addNotificationReceivedListener(() => {
+      bumpNotificationsChanged();
+    });
+    if (receivedSub && typeof receivedSub.remove === "function") {
+      cleanupFns.push(() => receivedSub.remove());
+    }
+  }
+
+  return () => {
+    cleanupFns.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* ignore */
+      }
+    });
+  };
 }
 
 export async function unregisterWorkflowPushToken(api) {

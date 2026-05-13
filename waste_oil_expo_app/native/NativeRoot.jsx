@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import { AuthProvider, AuthGate, useAuth } from "./AuthContext.jsx";
 import { registerWorkflowBackgroundFetchSafe } from "./registerBackgroundTasks.js";
 import { WorkflowSystemNotificationBridge } from "./WorkflowSystemNotificationBridge.jsx";
+import { WorkflowPushRegistration } from "./WorkflowPushRegistration.jsx";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "./theme.js";
 import { LoginScreen } from "./screens/LoginScreen.jsx";
@@ -255,6 +256,7 @@ export default function NativeRoot() {
     <SafeAreaProvider>
       <AuthProvider>
         <AuthGate>
+          <WorkflowPushRegistration />
           <WorkflowSystemNotificationBridge />
           <Inner />
         </AuthGate>

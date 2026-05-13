@@ -148,6 +148,7 @@ temp/
 
 # Firebase Android (do not commit real keys)
 waste_oil_expo_app/google-services.json
+waste_oil_expo_app/credentials/
 
 # ======================
 # Workspace Files (Machine-Specific)

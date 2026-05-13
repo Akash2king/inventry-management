@@ -15,6 +15,7 @@ import { useAuth } from "../AuthContext.jsx";
 import {
   getWorkflowNotificationPermissionStatus,
   isExpoPushRuntimeSupported,
+  registerWorkflowPushToken,
   requestWorkflowNotificationPermissions,
   setAppBadgeCountSafe,
 } from "../systemNotifications.js";
@@ -213,6 +214,9 @@ export function InAppNotificationsScreen({ navigation }) {
                     onPress={async () => {
                       const r = await requestWorkflowNotificationPermissions();
                       setPushPerm(r.status);
+                      if (api && r.status === "granted") {
+                        await registerWorkflowPushToken(api);
+                      }
                     }}
                   >
                     <Text style={styles.pushBtnText}>Enable push alerts</Text>

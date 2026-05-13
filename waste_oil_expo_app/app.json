@@ -45,7 +45,13 @@
         }
       ],
       "expo-font",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "workflow-notifications",
+          "color": "#16a34a"
+        }
+      ],
       "expo-background-fetch",
       "@react-native-community/datetimepicker"
     ],

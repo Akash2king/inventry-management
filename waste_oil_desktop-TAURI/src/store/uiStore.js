@@ -21,4 +21,8 @@ export const useUiStore = create((set, get) => ({
     set((s) => ({
       toasts: s.toasts.filter((t) => t.id !== id),
     })),
+
+  sidebarOpen: false,
+  setSidebarOpen: (isOpen) => set({ sidebarOpen: Boolean(isOpen) }),
+  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 }));

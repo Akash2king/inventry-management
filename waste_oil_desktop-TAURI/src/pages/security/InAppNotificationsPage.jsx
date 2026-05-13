@@ -97,10 +97,7 @@ export function InAppNotificationsPage() {
     setBroadcastBusy(true);
     setError("");
     try {
-      const res = await notifApi.broadcastNotification({ title, body }, token);
-      if (!res?.ok) {
-        throw new Error(res?.error || "Could not send notification");
-      }
+      await notifApi.broadcastNotification({ title, body }, token);
       setBroadcastTitle("");
       setBroadcastBody("");
       await load();

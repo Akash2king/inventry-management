@@ -21,6 +21,7 @@ export function Header() {
   const token = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
   const bumpPageRefresh = useUiStore((s) => s.bumpPageRefresh);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const [unread, setUnread] = useState(null);
   const prevUnreadRef = useRef(null);
   const lastPushAtRef = useRef(0);
@@ -86,6 +87,15 @@ export function Header() {
   return (
     <header className="header-bar">
       <div className="header-bar__brand">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm header-menu-btn"
+          onClick={toggleSidebar}
+          aria-label="Toggle navigation menu"
+        >
+          <span aria-hidden>☰</span>
+          <span>Menu</span>
+        </button>
         <h1>Chem-Solv Inventory</h1>
         <ToastContainer />
       </div>
