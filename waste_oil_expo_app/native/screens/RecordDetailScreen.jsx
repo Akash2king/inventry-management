@@ -205,9 +205,11 @@ export function RecordDetailScreen({ navigation, route }) {
     record?.viewer_is_holder !== undefined && record?.viewer_is_holder !== null
       ? Boolean(record.viewer_is_holder)
       : isCurrentHolder(record, user);
+  const viewerForwarded = Boolean(record?.viewer_forwarded);
   const readOnlyViewer =
     !locked &&
     !holderIsViewer &&
+    !viewerForwarded &&
     user &&
     ["storeman", "treatment", "admin", "manager", "gm", "superadmin"].includes(user.role);
   const needsCorrection = Boolean(record?.needs_workflow_correction);
@@ -275,6 +277,16 @@ export function RecordDetailScreen({ navigation, route }) {
               {holderIsViewer
                 ? "Update the record, then forward it when it is ready for the next department."
                 : "Only the current holder can edit and forward this correction."}
+            </Text>
+          </View>
+        ) : null}
+
+        {viewerForwarded && !holderIsViewer ? (
+          <View style={[styles.visibilityBanner, styles.bannerForwarded]}>
+            <Text style={styles.visibilityTitle}>Forwarded</Text>
+            <Text style={styles.visibilityText}>
+              You forwarded this record. Current holder: {holderLabel}. You can view it here but
+              cannot edit, forward, or return it.
             </Text>
           </View>
         ) : null}
@@ -668,6 +680,10 @@ const styles = StyleSheet.create({
   bannerSuccess: {
     borderColor: "rgba(22, 163, 74, 0.20)",
     backgroundColor: "rgba(34, 197, 94, 0.10)",
+  },
+  bannerForwarded: {
+    borderColor: "rgba(59, 130, 246, 0.28)",
+    backgroundColor: "rgba(59, 130, 246, 0.08)",
   },
   visibilityTitle: { fontSize: 13, fontWeight: "900", color: theme.colors.textBright },
   visibilityText: { fontSize: 12, lineHeight: 17, fontWeight: "700", color: theme.colors.text },

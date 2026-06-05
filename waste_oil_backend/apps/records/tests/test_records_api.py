@@ -352,7 +352,14 @@ class WasteOilRecordAPITests(TestCase):
         self.assertEqual(detail.status_code, status.HTTP_200_OK)
         self.assertEqual(detail.data["vendor_name"], "ForwardedAway")
         self.assertFalse(detail.data["viewer_is_holder"])
+        self.assertTrue(detail.data["viewer_forwarded"])
         self.assertEqual(detail.data["current_holder_username"], self.admin_u.username)
+        listed = self.client.get("/api/v1/records/")
+        self.assertEqual(listed.status_code, status.HTTP_200_OK)
+        matches = [r for r in listed.data["results"] if r["id"] == rid]
+        self.assertEqual(len(matches), 1)
+        self.assertFalse(matches[0]["viewer_is_holder"])
+        self.assertTrue(matches[0]["viewer_forwarded"])
         # Peer users should still see the transition they forwarded, including target user.
         forwarded = [
             t

@@ -65,6 +65,28 @@ def _cached_correction(serializer, obj):
     return cache[pk]
 
 
+def _cached_viewer_forward(serializer, obj):
+    request = serializer.context.get("request")
+    user = getattr(request, "user", None) if request else None
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    if obj.current_holder_id and str(obj.current_holder_id) == str(user.id):
+        return None
+    cache = serializer.context.setdefault("_viewer_forward_cache", {})
+    pk = obj.pk
+    if pk not in cache:
+        cache[pk] = (
+            StageTransition.objects.filter(
+                record_id=obj.pk,
+                transition_type=StageTransition.TransitionType.FORWARD,
+                transitioned_by_id=user.id,
+            )
+            .order_by("-sequence", "-timestamp")
+            .first()
+        )
+    return cache[pk]
+
+
 def _format_holding_duration_minutes(minutes):
     """Human-readable days, hours, minutes for automatic holding log."""
     if minutes is None:
@@ -180,6 +202,8 @@ class RecordListSerializer(serializers.ModelSerializer):
     needs_workflow_correction = serializers.SerializerMethodField()
     pending_return_feedback = serializers.SerializerMethodField()
     photo_url = serializers.SerializerMethodField()
+    viewer_is_holder = serializers.SerializerMethodField()
+    viewer_forwarded = serializers.SerializerMethodField()
 
     class Meta:
         model = WasteOilRecord
@@ -209,6 +233,8 @@ class RecordListSerializer(serializers.ModelSerializer):
             "current_holder_username",
             "needs_workflow_correction",
             "pending_return_feedback",
+            "viewer_is_holder",
+            "viewer_forwarded",
         )
         read_only_fields = fields
 
@@ -248,6 +274,17 @@ class RecordListSerializer(serializers.ModelSerializer):
             return obj.photo_path
         return request.build_absolute_uri(f"/media/{obj.photo_path}")
 
+    def get_viewer_is_holder(self, obj):
+        request = self.context.get("request")
+        if not request or not getattr(request.user, "is_authenticated", False):
+            return False
+        if obj.current_holder_id is None:
+            return False
+        return str(obj.current_holder_id) == str(request.user.id)
+
+    def get_viewer_forwarded(self, obj):
+        return _cached_viewer_forward(self, obj) is not None
+
 
 class RecordDetailSerializer(serializers.ModelSerializer):
     days_elapsed = serializers.SerializerMethodField()
@@ -259,6 +296,7 @@ class RecordDetailSerializer(serializers.ModelSerializer):
     current_holder_name = serializers.SerializerMethodField()
     current_holder_username = serializers.SerializerMethodField()
     viewer_is_holder = serializers.SerializerMethodField()
+    viewer_forwarded = serializers.SerializerMethodField()
     needs_workflow_correction = serializers.SerializerMethodField()
     pending_return_feedback = serializers.SerializerMethodField()
     photo_url = serializers.SerializerMethodField()
@@ -299,6 +337,7 @@ class RecordDetailSerializer(serializers.ModelSerializer):
             "current_holder_name",
             "current_holder_username",
             "viewer_is_holder",
+            "viewer_forwarded",
             "needs_workflow_correction",
             "pending_return_feedback",
             "is_locked",
@@ -345,6 +384,9 @@ class RecordDetailSerializer(serializers.ModelSerializer):
         if obj.current_holder_id is None:
             return False
         return str(obj.current_holder_id) == str(request.user.id)
+
+    def get_viewer_forwarded(self, obj):
+        return _cached_viewer_forward(self, obj) is not None
 
     def get_needs_workflow_correction(self, obj):
         return _cached_correction(self, obj)[0]

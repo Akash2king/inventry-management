@@ -37,6 +37,7 @@ function RecordListCardInner({ item, onPress, formatDate, formatQty, slaTotalDay
         <Text style={styles.title} numberOfLines={1}>
           {item.record_number}
           {item.needs_workflow_correction ? " · FIX" : ""}
+          {item.viewer_forwarded ? " · Forwarded" : ""}
         </Text>
         <StatusChip level={lvl} compact />
       </View>
@@ -53,6 +54,15 @@ function RecordListCardInner({ item, onPress, formatDate, formatQty, slaTotalDay
         {item.vehicle_details ? ` · ${fmt(item.vehicle_details)}` : ""}
         {item.photo_path ? " · Photo" : ""}
       </Text>
+
+      {item.viewer_forwarded ? (
+        <View style={styles.forwardedNotice}>
+          <Text style={styles.forwardedTitle}>Forwarded</Text>
+          <Text style={styles.forwardedText} numberOfLines={2}>
+            With {formatHolderLine(item)}. You can view this record but cannot edit or forward it.
+          </Text>
+        </View>
+      ) : null}
 
       {item.pending_return_feedback ? (
         <View style={styles.notice}>
@@ -115,4 +125,14 @@ const styles = StyleSheet.create({
   },
   noticeTitle: { fontSize: 11, fontWeight: "700", color: theme.colors.alert.yellow.fg },
   noticeText: { fontSize: 11, color: theme.colors.alert.yellow.fg, marginTop: 2 },
+  forwardedNotice: {
+    marginTop: theme.space.xs,
+    padding: theme.space.xs,
+    borderRadius: theme.radius.sm,
+    backgroundColor: "rgba(59, 130, 246, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(59, 130, 246, 0.22)",
+  },
+  forwardedTitle: { fontSize: 11, fontWeight: "700", color: theme.colors.accentHover },
+  forwardedText: { fontSize: 11, color: theme.colors.text, marginTop: 2, lineHeight: 15 },
 });

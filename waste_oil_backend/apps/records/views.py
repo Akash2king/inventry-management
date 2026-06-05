@@ -81,12 +81,17 @@ def records_visible_to_user(user):
     role = user.role
     if role in (CustomUser.Role.MANAGER, CustomUser.Role.GM, CustomUser.Role.SUPERADMIN):
         return qs
-    # Below manager level, users can only see records they currently hold.
-    # Once they forward a record away, it leaves their visible set.
+    # Below manager level: current holdings plus records they forwarded (read-only).
     if role in (CustomUser.Role.STOREMAN, CustomUser.Role.TREATMENT, CustomUser.Role.ADMIN):
-        return qs.filter(current_holder=user).exclude(
-            alert_level=WasteOilRecord.AlertLevel.COMPLETED
+        forwarded_by_user = StageTransition.objects.filter(
+            record_id=OuterRef("pk"),
+            transition_type=StageTransition.TransitionType.FORWARD,
+            transitioned_by_id=user.id,
         )
+        return qs.filter(
+            Q(current_holder=user)
+            | (Exists(forwarded_by_user) & ~Q(current_holder=user))
+        ).exclude(alert_level=WasteOilRecord.AlertLevel.COMPLETED)
     return qs.none()
 
 
