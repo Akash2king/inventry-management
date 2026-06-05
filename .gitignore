@@ -158,11 +158,6 @@ google-services.json
 **/firebase-adminsdk*.json
 waste_oil_expo_app/credentials/
 
-# Android signing keys (never commit)
-*.jks
-*.keystore
-**/ANDROID_KEYSTORE_BASE64.txt
-
 # Accidental local/broken virtualenv copies
 **/.venv.windows-broken/
 .venv.windows-broken/
