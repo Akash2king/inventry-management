@@ -16,6 +16,7 @@
     ],
     "android": {
       "package": "com.chemsolv.inventory",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/app-logo.png",
         "backgroundColor": "#f1f4f8"
@@ -37,6 +38,12 @@
     },
     "plugins": [
       [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
@@ -45,20 +52,13 @@
         }
       ],
       "expo-font",
-      [
-        "expo-notifications",
-        {
-          "defaultChannel": "workflow-notifications",
-          "color": "#16a34a"
-        }
-      ],
-      "expo-background-fetch",
       "@react-native-community/datetimepicker"
     ],
     "extra": {
       "eas": {
         "projectId": "ed9b3cba-8199-4917-bdd5-b3648b6cbf5a"
-      }
+      },
+      "oneSignalAppId": "e744024a-08b5-4703-a3ed-af0ac17e907f"
     },
     "owner": "akash2king-org"
   }

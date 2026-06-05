@@ -50,7 +50,7 @@ class UserNotification(models.Model):
 
 
 class NotificationDevice(models.Model):
-    """Device push tokens registered for a user (Expo push tokens for remote tray notifications)."""
+    """Device push subscriptions registered for a user (OneSignal subscription IDs)."""
 
     id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(

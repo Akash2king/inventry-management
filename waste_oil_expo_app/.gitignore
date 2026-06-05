@@ -85,7 +85,14 @@ temp/
 .expo-shared/
 android/
 ios/
+scripts/platform-tools/
 
 # Never commit signing keys
 *.jks
 *.keystore
+
+# Firebase / Google Cloud credentials (never commit)
+google-services.json
+credentials/
+**/*-firebase-adminsdk-*.json
+**/firebase-adminsdk*.json

@@ -36,18 +36,18 @@ export function IconButton({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 44,
+    minHeight: 40,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 8,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.surface,
     justifyContent: "center",
   },
-  pressed: { opacity: 0.9 },
-  disabled: { opacity: 0.55 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  text: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
+  pressed: { opacity: 0.88 },
+  disabled: { opacity: 0.5 },
+  row: { flexDirection: "row", alignItems: "center", gap: 6 },
+  text: { fontSize: 12, fontWeight: "600", color: theme.colors.textBright },
 });
 

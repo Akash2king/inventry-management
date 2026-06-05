@@ -1,20 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../AuthContext.jsx";
+import { showSuccess, showError, showBlockingError, showConfirm } from "../utils/feedback.js";
+import { Button, KeyboardAwareScroll, LoadingBlock, ModalHeader, ModalShell } from "../components/ui/index.js";
+import { theme } from "../theme.js";
+import { useScrollContentStyle } from "../utils/responsive.js";
+import { useResponsiveType } from "../utils/typography.js";
 
 function normalizeUuid(v) {
   return String(v || "").trim();
@@ -42,6 +46,8 @@ function parseDateValue(value) {
 
 export function RecordFormScreen({ navigation, route }) {
   const { api } = useAuth();
+  const scrollStyle = useScrollContentStyle({ gap: 12 });
+  const type = useResponsiveType();
   const mode = route.params?.mode || "create";
   const recordId = route.params?.recordId ? String(route.params.recordId) : "";
 
@@ -126,7 +132,7 @@ export function RecordFormScreen({ navigation, route }) {
         setVehicleDetails(d.vehicle_details || "");
         setRemarks(d.remarks || "");
       } else {
-        Alert.alert("Could not load record", r.error || "Unknown error");
+        showBlockingError("Could not load record", r.error || "Unknown error");
       }
     } else if (mode === "create") {
       // defaults
@@ -143,7 +149,7 @@ export function RecordFormScreen({ navigation, route }) {
   async function pickPhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Permission needed", "Allow photo library permission to attach an entry photo.");
+      showBlockingError("Permission needed", "Allow photo library permission to attach an entry photo.");
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -169,7 +175,7 @@ export function RecordFormScreen({ navigation, route }) {
     if (!api) return;
     const err = validate();
     if (err) {
-      Alert.alert("Check form", err);
+      showError(err);
       return;
     }
     setBusy(true);
@@ -202,14 +208,14 @@ export function RecordFormScreen({ navigation, route }) {
       if (id && photoAsset) {
         const up = await api.records.uploadPhoto(id, photoAsset);
         if (!up.ok) {
-          Alert.alert("Saved, but photo failed", up.error || "Could not upload photo");
+          showError(up.error || "Saved, but photo upload failed");
         }
       }
 
-      Alert.alert("Saved", "Record saved successfully.");
+      showSuccess("Record saved successfully.");
       navigation.goBack();
     } catch (e) {
-      Alert.alert("Save failed", e?.message || "Unknown error");
+      showError(e?.message || "Save failed");
     } finally {
       setBusy(false);
     }
@@ -254,7 +260,7 @@ export function RecordFormScreen({ navigation, route }) {
       }
       applyOption(optionModal.key, val);
     } catch (e) {
-      Alert.alert("Failed", e?.message || "Could not create option");
+      showError(e?.message || "Could not create option");
     } finally {
       setOptionBusy(false);
     }
@@ -264,98 +270,98 @@ export function RecordFormScreen({ navigation, route }) {
     if (!api || !optionModal?.key) return;
     if (!row?.id) return;
     const label = row.value || row.name || "";
-    Alert.alert("Delete option", `Delete "${label}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          setOptionBusy(true);
-          try {
-            const res = await api.records.deleteOption(row.id);
-            if (!res.ok) throw new Error(res.error || "Could not delete option");
-            const list = await api.records.listOptions({ category: optionModal.key });
-            if (list.ok && Array.isArray(list.data)) {
-              setOptions((prev) => ({ ...prev, [optionModal.key]: list.data }));
-            }
-          } catch (e) {
-            Alert.alert("Failed", e?.message || "Could not delete option");
-          } finally {
-            setOptionBusy(false);
+    showConfirm({
+      title: "Delete option",
+      message: `Delete "${label}"?`,
+      confirmText: "Delete",
+      destructive: true,
+      icon: "trash-outline",
+      onConfirm: async () => {
+        setOptionBusy(true);
+        try {
+          const res = await api.records.deleteOption(row.id);
+          if (!res.ok) throw new Error(res.error || "Could not delete option");
+          const list = await api.records.listOptions({ category: optionModal.key });
+          if (list.ok && Array.isArray(list.data)) {
+            setOptions((prev) => ({ ...prev, [optionModal.key]: list.data }));
           }
-        },
+        } catch (e) {
+          showError(e?.message || "Could not delete option");
+        } finally {
+          setOptionBusy(false);
+        }
       },
-    ]);
+    });
   }
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <LoadingBlock message="Loading form…" fullScreen />
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{mode === "edit" ? "Edit record" : "New record"}</Text>
+      <KeyboardAwareScroll contentContainerStyle={scrollStyle}>
+        <Text style={[styles.title, type.title]}>{mode === "edit" ? "Edit record" : "New record"}</Text>
 
-        <Text style={styles.label}>Vendor *</Text>
+        <Text style={[styles.label, type.label]}>Vendor *</Text>
         <TouchableOpacity style={styles.select} onPress={() => setVendorModal(true)}>
           <Text style={styles.selectText} numberOfLines={1}>
             {vendorName || "Select vendor"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Product description</Text>
+        <Text style={[styles.label, type.label]}>Product description</Text>
         <TextInput
           value={productDescription}
           onChangeText={setProductDescription}
-          style={[styles.input, styles.multiline]}
+          style={[styles.input, type.input, type.inputPad, styles.multiline]}
           multiline
           placeholder="Optional"
           placeholderTextColor="#94a3b8"
         />
 
-        <Text style={styles.label}>Product type *</Text>
+        <Text style={[styles.label, type.label]}>Product type *</Text>
         <TouchableOpacity style={styles.select} onPress={() => openOptionPicker("product_type")}>
           <Text style={styles.selectText} numberOfLines={1}>
             {productType || "Select product type"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Unit *</Text>
+        <Text style={[styles.label, type.label]}>Unit *</Text>
         <TouchableOpacity style={styles.select} onPress={() => openOptionPicker("unit")}>
           <Text style={styles.selectText} numberOfLines={1}>
             {unit || "Select unit"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Packaging</Text>
+        <Text style={[styles.label, type.label]}>Packaging</Text>
         <TouchableOpacity style={styles.select} onPress={() => openOptionPicker("packaging")}>
           <Text style={styles.selectText} numberOfLines={1}>
             {packaging || "Select packaging"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Quantity *</Text>
+        <Text style={[styles.label, type.label]}>Quantity *</Text>
         <TextInput
           value={quantity}
           onChangeText={setQuantity}
-          style={styles.input}
+          style={[styles.input, type.input, type.inputPad]}
           keyboardType="decimal-pad"
           placeholder="e.g. 1250.5"
           placeholderTextColor="#94a3b8"
         />
 
-        <Text style={styles.label}>Entry date *</Text>
+        <Text style={[styles.label, type.label]}>Entry date *</Text>
         <TouchableOpacity style={styles.dateSelect} onPress={() => setDatePicker("entry")}>
           <Text style={styles.selectText}>{entryDate || "Select entry date"}</Text>
           <Text style={styles.dateSelectHint}>Change</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Due date</Text>
+        <Text style={[styles.label, type.label]}>Due date</Text>
         <View style={styles.dateRow}>
           <TouchableOpacity style={[styles.dateSelect, { flex: 1 }]} onPress={() => setDatePicker("due")}>
             <Text style={styles.selectText}>{dueDate || "Select due date"}</Text>
@@ -372,23 +378,23 @@ export function RecordFormScreen({ navigation, route }) {
           <Text style={styles.advTitle}>More details (optional)</Text>
         </View>
 
-        <Text style={styles.label}>Driver name</Text>
+        <Text style={[styles.label, type.label]}>Driver name</Text>
         <TouchableOpacity style={styles.select} onPress={() => openOptionPicker("driver_name")}>
           <Text style={styles.selectText} numberOfLines={1}>
             {driverName || "Select driver"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Vehicle details</Text>
+        <Text style={[styles.label, type.label]}>Vehicle details</Text>
         <TextInput
           value={vehicleDetails}
           onChangeText={setVehicleDetails}
-          style={styles.input}
+          style={[styles.input, type.input, type.inputPad]}
           placeholder="Optional"
           placeholderTextColor="#94a3b8"
         />
 
-        <Text style={styles.label}>Entry photo</Text>
+        <Text style={[styles.label, type.label]}>Entry photo</Text>
         <TouchableOpacity style={styles.photoBtn} onPress={() => void pickPhoto()}>
           <Text style={styles.photoBtnText}>
             {photoAsset ? "Change photo" : "Pick a photo"}
@@ -400,29 +406,23 @@ export function RecordFormScreen({ navigation, route }) {
           </Text>
         ) : null}
 
-        <Text style={styles.label}>Remarks</Text>
+        <Text style={[styles.label, type.label]}>Remarks</Text>
         <TextInput
           value={remarks}
           onChangeText={setRemarks}
-          style={[styles.input, styles.multiline]}
+          style={[styles.input, type.input, type.inputPad, styles.multiline]}
           multiline
           placeholder="Optional"
           placeholderTextColor="#94a3b8"
         />
 
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.primary, busy && styles.disabled]}
-            onPress={() => void submit()}
-            disabled={busy}
-          >
-            <Text style={styles.primaryText}>{busy ? "Saving…" : "Save"}</Text>
-          </TouchableOpacity>
+          <Button title="Save" onPress={() => void submit()} loading={busy} disabled={busy} />
           <TouchableOpacity style={styles.ghost} onPress={() => navigation.goBack()}>
             <Text style={styles.ghostText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScroll>
 
       {datePicker ? (
         <View style={Platform.OS === "ios" ? styles.iosPickerWrap : null}>
@@ -443,13 +443,8 @@ export function RecordFormScreen({ navigation, route }) {
       ) : null}
 
       <Modal visible={vendorModal} animationType="slide">
-        <SafeAreaView style={styles.modalSafe} edges={["bottom"]}>
-          <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Select vendor</Text>
-            <TouchableOpacity onPress={() => setVendorModal(false)}>
-              <Text style={styles.modalClose}>Close</Text>
-            </TouchableOpacity>
-          </View>
+        <ModalShell style={styles.modalSafe}>
+          <ModalHeader title="Select vendor" onClose={() => setVendorModal(false)} />
           <View style={styles.modalSearch}>
             <TextInput
               value={vendorSearch}
@@ -461,7 +456,11 @@ export function RecordFormScreen({ navigation, route }) {
               autoCorrect={false}
             />
           </View>
-          <ScrollView contentContainerStyle={styles.modalList}>
+          <ScrollView
+            contentContainerStyle={styles.modalList}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
             {filteredVendors.map((v) => (
               <TouchableOpacity
                 key={String(v.id)}
@@ -480,17 +479,12 @@ export function RecordFormScreen({ navigation, route }) {
               <Text style={styles.empty}>No vendors yet. Add vendors next.</Text>
             ) : null}
           </ScrollView>
-        </SafeAreaView>
+        </ModalShell>
       </Modal>
 
       <Modal visible={Boolean(optionModal)} animationType="slide">
-        <SafeAreaView style={styles.modalSafe} edges={["bottom"]}>
-          <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Select</Text>
-            <TouchableOpacity onPress={() => setOptionModal(null)}>
-              <Text style={styles.modalClose}>Close</Text>
-            </TouchableOpacity>
-          </View>
+        <ModalShell style={styles.modalSafe}>
+          <ModalHeader title="Select" onClose={() => setOptionModal(null)} />
           <View style={styles.modalSearch}>
             <TextInput
               value={optionSearch}
@@ -518,7 +512,11 @@ export function RecordFormScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           </View>
-          <ScrollView contentContainerStyle={styles.modalList}>
+          <ScrollView
+            contentContainerStyle={styles.modalList}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
             {(optionModal?.key ? options[optionModal.key] : [])
               .filter((o) => {
                 const q = optionSearch.trim().toLowerCase();
@@ -550,28 +548,29 @@ export function RecordFormScreen({ navigation, route }) {
               <Text style={styles.empty}>No options found. You can type values manually later.</Text>
             ) : null}
           </ScrollView>
-        </SafeAreaView>
+        </ModalShell>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f8fafc" },
+  safe: { flex: 1, backgroundColor: theme.colors.bg },
+  flex: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  scroll: { padding: 16, paddingBottom: 40, gap: 8 },
-  title: { fontSize: 20, fontWeight: "900", color: "#0f172a", marginBottom: 6 },
-  label: { marginTop: 8, fontSize: 13, fontWeight: "800", color: "#334155" },
+  scroll: { padding: theme.space.md, paddingBottom: 40, gap: 8 },
+  title: { ...theme.type.title, marginBottom: 6 },
+  label: { marginTop: 8, ...theme.type.caption, color: theme.colors.textBright, fontWeight: "600" },
   input: {
     marginTop: 6,
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 14 : 10,
     fontSize: 16,
-    color: "#0f172a",
+    color: theme.colors.textBright,
   },
   multiline: { minHeight: 80, textAlignVertical: "top" },
   select: {
@@ -583,7 +582,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 14,
   },
-  selectText: { color: "#0f172a", fontSize: 16, fontWeight: "700" },
+  selectText: { color: theme.colors.textBright, fontSize: 16, fontWeight: "600" },
   dateRow: { flexDirection: "row", alignItems: "stretch", gap: 10 },
   dateSelect: {
     marginTop: 6,
@@ -598,7 +597,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
   },
-  dateSelectHint: { color: "#15803d", fontSize: 12, fontWeight: "900" },
+  dateSelectHint: { color: theme.colors.accent, fontSize: 12, fontWeight: "700" },
   clearDateBtn: {
     marginTop: 6,
     minWidth: 72,
@@ -629,12 +628,14 @@ const styles = StyleSheet.create({
   advTitle: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
   photoBtn: {
     marginTop: 6,
-    backgroundColor: "#dcfce7",
-    borderRadius: 12,
+    backgroundColor: theme.colors.accentSoft,
+    borderRadius: theme.radius.md,
     paddingVertical: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  photoBtnText: { color: "#166534", fontWeight: "900" },
+  photoBtnText: { color: theme.colors.accentHover, fontWeight: "700" },
   hint: { marginTop: 6, fontSize: 12, color: "#64748b" },
   actions: { marginTop: 18, gap: 10 },
   primary: {
@@ -659,7 +660,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
   },
   modalTitle: { fontSize: 16, fontWeight: "900", color: "#0f172a" },
-  modalClose: { color: "#15803d", fontWeight: "900" },
+  modalClose: { color: theme.colors.accent, fontWeight: "700" },
   modalSearch: {
     padding: 12,
     backgroundColor: "#fff",

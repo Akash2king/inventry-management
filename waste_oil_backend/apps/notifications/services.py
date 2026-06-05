@@ -5,18 +5,18 @@ from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
-from apps.notifications.expo_push import (
-    ANDROID_NOTIFICATION_CHANNEL_ID,
-    expo_push_data_for_navigation,
-    is_expo_push_token,
-    send_expo_push_batch,
+from apps.notifications.models import NotificationDevice
+from apps.notifications.onesignal_push import (
+    is_onesignal_configured,
+    push_data_for_navigation,
+    send_onesignal_push,
 )
 from apps.notifications.in_app import (
     mirror_email_as_user_notification,
     mirror_email_to_users,
     users_from_email_recipients,
 )
-from apps.notifications.models import NotificationDevice, UserNotification
+from apps.notifications.models import UserNotification
 from apps.records.models import WasteOilRecord
 
 logger = logging.getLogger(__name__)
@@ -373,71 +373,36 @@ class NotificationService:
 
     @staticmethod
     def send_push_to_users(users: list, title: str, body: str, metadata: dict | None = None) -> None:
-        """Send tray notifications via Expo Push (Android + iOS). Requires EXPO_PUSH_ENABLED."""
-        user_ids = [getattr(u, "id", getattr(u, "pk", None)) for u in users if u]
-        uid_set = {x for x in user_ids if x}
-        meta = metadata or {}
-        if not uid_set:
+        """Send tray notifications via OneSignal (external user id from OneSignal.login)."""
+        external_ids = [
+            str(getattr(u, "id", getattr(u, "pk", None)))
+            for u in users
+            if u and getattr(u, "id", getattr(u, "pk", None))
+        ]
+        if not external_ids:
             return
 
-        if not getattr(settings, "EXPO_PUSH_ENABLED", True):
-            logger.info("expo_push_disabled skip users=%s", sorted(uid_set))
+        if not getattr(settings, "ONESIGNAL_PUSH_ENABLED", True):
+            logger.info("onesignal_push_disabled skip users=%s", external_ids)
             return
 
-        data_payload = expo_push_data_for_navigation(meta)
-
-        rows = NotificationDevice.objects.filter(user_id__in=uid_set).values("token", "platform")
-        seen: set[str] = set()
-        targets: list[tuple[str, str]] = []
-        skipped_non_expo = 0
-        for row in rows:
-            tok = (row.get("token") or "").strip()
-            if not tok or tok in seen:
-                continue
-            if not is_expo_push_token(tok):
-                skipped_non_expo += 1
-                continue
-            plat = (row.get("platform") or "").strip().lower()
-            if plat and plat not in ("android", "ios", ""):
-                logger.debug("push_skip_unknown_platform platform=%s", plat)
-                continue
-            seen.add(tok)
-            targets.append((tok, plat))
-
-        if skipped_non_expo:
-            logger.info(
-                "push_skipped_non_expo_tokens count=%s (register Expo push token from the app)",
-                skipped_non_expo,
-            )
-
-        if not targets:
-            logger.info(
-                "push_no_expo_tokens users=%s title=%s",
-                sorted(uid_set),
-                (title or "")[:80],
-            )
-            return
-
-        messages: list[dict] = []
-        for tok, plat in targets:
-            msg: dict = {
-                "to": tok,
-                "title": (title or "")[:200],
-                "body": (body or "")[:4000],
-                "sound": "default",
-                "priority": "high",
-                "data": data_payload,
-            }
-            if plat == "android":
-                msg["channelId"] = ANDROID_NOTIFICATION_CHANNEL_ID
-            messages.append(msg)
-
-        sent = send_expo_push_batch(messages)
+        data_payload = push_data_for_navigation(metadata or {})
+        subscription_ids = list(
+            NotificationDevice.objects.filter(user__in=users)
+            .values_list("token", flat=True)
+            .distinct()
+        )
+        sent = send_onesignal_push(
+            external_user_ids=external_ids,
+            subscription_ids=subscription_ids,
+            title=title,
+            body=body,
+            data=data_payload,
+        )
 
         logger.info(
-            "push_expo_finished users=%s devices=%s tickets_ok=%s title=%s",
-            sorted(uid_set),
-            len(targets),
+            "push_onesignal_finished users=%s accepted=%s title=%s",
+            external_ids,
             sent,
             (title or "")[:80],
         )

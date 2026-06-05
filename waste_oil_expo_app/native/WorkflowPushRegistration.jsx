@@ -1,10 +1,9 @@
 import { useEffect } from "react";
 import { useAuth } from "./AuthContext.jsx";
-import { startWorkflowPushRegistration } from "./systemNotifications.js";
+import { startOneSignalSession } from "./oneSignalService.js";
 
 /**
- * Registers the Expo push token with the backend and keeps it updated after login.
- * Follows the Expo push setup flow (permissions, channel, token, listeners).
+ * Links the signed-in user to OneSignal (external user id) and registers the subscription with Django.
  */
 export function WorkflowPushRegistration() {
   const { api, user } = useAuth();
@@ -13,22 +12,7 @@ export function WorkflowPushRegistration() {
     if (!api || !user) {
       return undefined;
     }
-    let cancelled = false;
-    let stop = () => {};
-
-    void (async () => {
-      const cleanup = await startWorkflowPushRegistration(api);
-      if (cancelled) {
-        cleanup();
-        return;
-      }
-      stop = cleanup;
-    })();
-
-    return () => {
-      cancelled = true;
-      stop();
-    };
+    return startOneSignalSession(api, user);
   }, [api, user]);
 
   return null;

@@ -1,17 +1,17 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { navigationRef } from "./navigationRef.js";
 import { PushNotificationDeeplink } from "./PushNotificationDeeplink.jsx";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, useWindowDimensions } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { AuthProvider, AuthGate, useAuth } from "./AuthContext.jsx";
-import { registerWorkflowBackgroundFetchSafe } from "./registerBackgroundTasks.js";
-import { WorkflowSystemNotificationBridge } from "./WorkflowSystemNotificationBridge.jsx";
 import { WorkflowPushRegistration } from "./WorkflowPushRegistration.jsx";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "./theme.js";
+import { BREAKPOINTS } from "./utils/responsive.js";
 import { LoginScreen } from "./screens/LoginScreen.jsx";
 import { RecordsScreen } from "./screens/RecordsScreen.jsx";
 import { RecordDetailScreen } from "./screens/RecordDetailScreen.jsx";
@@ -26,6 +26,8 @@ import { AuditLogsScreen } from "./screens/AuditLogsScreen.jsx";
 import { GmConsoleScreen } from "./screens/GmConsoleScreen.jsx";
 import { SessionsScreen } from "./screens/SessionsScreen.jsx";
 import { InAppNotificationsScreen } from "./screens/InAppNotificationsScreen.jsx";
+import { ToastHost } from "./components/ui/ToastHost.jsx";
+import { AppDialogHost } from "./components/ui/AppDialogHost.jsx";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -43,34 +45,35 @@ const NavTheme = {
 function MainTabs() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= BREAKPOINTS.tablet;
   const mustChange = Boolean(user?.must_change_password);
   const bottomPad = Math.max(insets.bottom, 14);
+  const tabBarSidePad = isTablet ? Math.max((width - 640) / 2, 24) : 0;
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: theme.colors.surfaceStrong,
-          borderTopColor: theme.colors.border,
-          borderTopWidth: 1,
-          height: 58 + bottomPad,
-          paddingTop: 7,
+          backgroundColor: theme.colors.bgElevated,
+          borderTopColor: theme.colors.divider,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: (isTablet ? 62 : theme.layout.tabBarHeight) + bottomPad,
+          paddingTop: 6,
           paddingBottom: bottomPad,
-          elevation: 12,
-          shadowColor: "#0f172a",
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: -4 },
+          paddingHorizontal: tabBarSidePad,
+          ...theme.shadow.md,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "800",
+          fontSize: isTablet ? 11 : 10,
+          fontWeight: "600",
+          marginTop: -2,
         },
         tabBarItemStyle: {
-          paddingVertical: 2,
+          paddingVertical: 4,
         },
         tabBarActiveTintColor: theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.text,
+        tabBarInactiveTintColor: theme.colors.textMuted,
       }}
     >
       <Tab.Screen
@@ -143,6 +146,9 @@ function AppStack() {
         headerTintColor: theme.colors.textBright,
         headerTitleStyle: { fontWeight: "800" },
         headerShadowVisible: false,
+        animation: "slide_from_right",
+        animationDuration: theme.motion.normal,
+        contentStyle: { backgroundColor: theme.colors.bg },
       }}
     >
       {!isAuthenticated ? (
@@ -239,6 +245,8 @@ function Inner() {
   return (
     <>
       <StatusBar style="dark" />
+      <ToastHost />
+      <AppDialogHost />
       <NavigationContainer ref={navigationRef} theme={NavTheme}>
         <PushNotificationDeeplink />
         <AppStack />
@@ -248,16 +256,11 @@ function Inner() {
 }
 
 export default function NativeRoot() {
-  useEffect(() => {
-    void registerWorkflowBackgroundFetchSafe();
-  }, []);
-
   return (
     <SafeAreaProvider>
       <AuthProvider>
         <AuthGate>
           <WorkflowPushRegistration />
-          <WorkflowSystemNotificationBridge />
           <Inner />
         </AuthGate>
       </AuthProvider>

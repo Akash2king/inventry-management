@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   StyleSheet,
   Switch,
@@ -10,7 +10,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -19,8 +18,21 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 import { theme } from "../theme.js";
+import {
+  Chip,
+  EmptyState,
+  IconAction,
+  LoadingBlock,
+  PageHeader,
+  RecordListCard,
+  SearchField,
+} from "../components/ui/index.js";
+import { FLATLIST_PERF } from "../utils/listPerf.js";
+import { showSuccess, showError } from "../utils/feedback.js";
 import { formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
 import { formatHolderLine } from "../../src/utils/holderDisplay.js";
+import { useResponsive } from "../utils/responsive.js";
+import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 
 const STAGES = ["", "1", "2", "3", "4", "5"];
 const ALERTS = ["", "green", "yellow", "orange", "red", "completed"];
@@ -57,22 +69,9 @@ function parseDateValue(value) {
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
-function badgeColor(level) {
-  const k = String(level || "").toLowerCase();
-  if (k === "completed") return { bg: "#dcfce7", fg: "#166534" };
-  if (k === "red") return { bg: "rgba(239,68,68,0.12)", fg: "#b91c1c" };
-  if (k === "orange") return { bg: "rgba(249,115,22,0.12)", fg: "#c2410c" };
-  if (k === "yellow") return { bg: "rgba(234,179,8,0.16)", fg: "#92400e" };
-  return { bg: "rgba(34,197,94,0.12)", fg: "#166534" };
-}
-
-function fmt(v) {
-  const s = v == null ? "" : String(v).trim();
-  return s ? s : "—";
-}
-
 export function RecordsScreen({ navigation }) {
-  const { api, logout, refreshUser, user } = useAuth();
+  const { api, refreshUser, user } = useAuth();
+  const { listColumns, horizontalPad, contentMaxWidth, gridGap } = useResponsive();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -270,85 +269,78 @@ export function RecordsScreen({ navigation }) {
         });
       }
       // Always show where file was saved
-      Alert.alert("Saved", `Saved to Documents:\n${uri}`);
+      showSuccess("Export saved to Documents");
+    } catch (e) {
+      showError(e?.message || "Export failed");
     } finally {
       setExportBusy(false);
     }
   }, [api, effectiveMode, stage, dateFrom, dateTo, search, alert, overdueOnly, departmentId]);
 
+  const openRecord = useCallback(
+    (item) => {
+      navigation.getParent()?.navigate("RecordDetail", {
+        recordId: String(item.id),
+        title: item.record_number,
+      });
+    },
+    [navigation],
+  );
+
+  const renderRecord = useCallback(
+    ({ item }) => (
+      <RecordListCard
+        item={item}
+        gridMode={listColumns > 1}
+        onPress={() => openRecord(item)}
+        formatDate={formatDate}
+        formatQty={formatQty}
+        slaTotalDays={slaTotalDays}
+        formatHolderLine={formatHolderLine}
+      />
+    ),
+    [openRecord, listColumns],
+  );
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top","bottom"]}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Records</Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {user?.full_name || user?.username || "—"}
-          </Text>
-        </View>
-        {user?.role === "storeman" && !user?.must_change_password ? (
-          <TouchableOpacity
-            style={styles.headerNewBtn}
-            onPress={() => navigation.getParent()?.navigate("RecordForm", { mode: "create" })}
-          >
-            <Text style={styles.headerNewBtnText}>New</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      <View style={styles.actionsRow}>
-        {canSeeAll ? (
-          <TouchableOpacity
-            style={[styles.headerChip, effectiveMode === "open" && styles.headerChipOn]}
-            onPress={() => setMode("open")}
-          >
-            <Text style={[styles.headerChipText, effectiveMode === "open" && styles.headerChipTextOn]}>Open</Text>
-          </TouchableOpacity>
-        ) : null}
-        {canSeeAll ? (
-          <TouchableOpacity
-            style={[styles.headerChip, effectiveMode === "all" && styles.headerChipOn]}
-            onPress={() => setMode("all")}
-          >
-            <Text style={[styles.headerChipText, effectiveMode === "all" && styles.headerChipTextOn]}>All</Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {/* New button moved to header for top-right placement */}
-
-        <TouchableOpacity style={styles.headerBtn} onPress={() => setShowFilters((s) => !s)}>
-          <View style={styles.headerBtnInner}>
-            <Text style={styles.headerBtnText}>{showFilters ? "Hide filters" : "Filters"}</Text>
-            {activeFilterCount > 0 ? (
-              <View style={styles.filterCountBadge}>
-                <Text style={styles.filterCountBadgeText}>{activeFilterCount}</Text>
-              </View>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <PageHeader
+        title="Records"
+        subtitle={user?.full_name || user?.username || "—"}
+        right={
+          <>
+            {user?.role === "storeman" && !user?.must_change_password ? (
+              <IconAction
+                icon="add"
+                label="New"
+                variant="primary"
+                onPress={() => navigation.getParent()?.navigate("RecordForm", { mode: "create" })}
+              />
             ) : null}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.headerBtn, exportBusy && { opacity: 0.6 }]}
-          disabled={exportBusy}
-          onPress={() => void exportExcel()}
-        >
-          <Text style={styles.headerBtnText}>{exportBusy ? "Exporting…" : "Export"}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate("QueueTab")}>
-          <Text style={styles.headerBtnText}>Queue</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate("SettingsTab")}>
-          <Text style={styles.headerBtnText}>Settings</Text>
-        </TouchableOpacity>
+          </>
+        }
+      />
 
-        <TouchableOpacity
-          style={styles.headerBtnGhost}
-          onPress={() =>
-            void logout().then(() =>
-              navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] }),
-            )
-          }
-        >
-          <Text style={styles.headerBtnGhostText}>Sign out</Text>
-        </TouchableOpacity>
+      <ContentWidth>
+      <View style={styles.chipRow}>
+        {canSeeAll ? (
+          <>
+            <Chip label="Open" selected={effectiveMode === "open"} onPress={() => setMode("open")} />
+            <Chip label="All" selected={effectiveMode === "all"} onPress={() => setMode("all")} />
+          </>
+        ) : null}
+        <Chip
+          label={showFilters ? "Hide filters" : "Filters"}
+          selected={showFilters}
+          onPress={() => setShowFilters((s) => !s)}
+          badge={activeFilterCount}
+        />
+        <Chip
+          label={exportBusy ? "Exporting…" : "Export"}
+          selected={false}
+          onPress={() => !exportBusy && void exportExcel()}
+        />
       </View>
 
       {activeFilterCount > 0 ? (
@@ -481,160 +473,44 @@ export function RecordsScreen({ navigation }) {
         </View>
       ) : null}
 
-      <View style={styles.searchBar}>
-        <TextInput
-          value={search}
-          onChangeText={(t) => setSearch(t)}
-          placeholder="Search record number, vendor…"
-          placeholderTextColor="#94a3b8"
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          onSubmitEditing={() => {
-            setLoading(true);
-            void load(1);
-          }}
-        />
-        <TouchableOpacity
-          style={styles.searchBtn}
-          onPress={() => {
-            setLoading(true);
-            void load(1);
-          }}
-        >
-          <Text style={styles.searchBtnText}>Go</Text>
-        </TouchableOpacity>
-      </View>
+      <SearchField
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Record number, vendor…"
+        onSubmit={() => {
+          setLoading(true);
+          void load(1);
+        }}
+      />
+      </ContentWidth>
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-        </View>
+        <LoadingBlock message="Loading records…" />
       ) : (
         <FlatList
           data={records}
+          key={`records-${listColumns}`}
+          numColumns={listColumns}
+          columnWrapperStyle={listColumns > 1 ? { gap: gridGap, paddingHorizontal: horizontalPad } : undefined}
           keyExtractor={(item) => String(item.id)}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.accent}
+            />
+          }
           onEndReachedThreshold={0.4}
           onEndReached={() => void loadNext()}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() =>
-                navigation.getParent()?.navigate("RecordDetail", {
-                  recordId: String(item.id),
-                  title: item.record_number,
-                })
-              }
-            >
-              <View style={styles.cardHead}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {item.record_number}
-                    {item.needs_workflow_correction ? "  • NEEDS FIX" : ""}
-                  </Text>
-                  <Text style={styles.cardSub} numberOfLines={1}>
-                    {fmt(item.vendor_name)}
-                  </Text>
-                </View>
-                {(() => {
-                  const lvl = item.computed_alert_level || item.alert_level || "green";
-                  const c = badgeColor(lvl);
-                  return (
-                    <View style={[styles.badge, { backgroundColor: c.bg }]}>
-                      <Text style={[styles.badgeText, { color: c.fg }]}>{String(lvl).toUpperCase()}</Text>
-                    </View>
-                  );
-                })()}
-              </View>
-
-              {item.pending_return_feedback ? (
-                <View style={styles.notice}>
-                  <Text style={styles.noticeTitle}>Fix requested</Text>
-                  <Text style={styles.noticeText} numberOfLines={3}>
-                    {String(item.pending_return_feedback)}
-                  </Text>
-                </View>
-              ) : null}
-              {item.needs_workflow_correction && !item.pending_return_feedback ? (
-                <View style={styles.notice}>
-                  <Text style={styles.noticeTitle}>Needs workflow correction</Text>
-                  <Text style={styles.noticeText}>Review this record before forwarding.</Text>
-                </View>
-              ) : null}
-
-              <View style={styles.kvRow}>
-                <Text style={styles.kvKey}>Product</Text>
-                <Text style={styles.kvVal} numberOfLines={1}>
-                  {fmt(item.product_type)}
-                </Text>
-                <Text style={styles.kvKey}>Pack</Text>
-                <Text style={styles.kvVal} numberOfLines={1}>
-                  {fmt(item.packaging)}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={styles.kvKey}>Stage</Text>
-                <Text style={styles.kvVal}>{fmt(item.current_stage)}</Text>
-                <Text style={styles.kvKey}>Qty</Text>
-                <Text style={styles.kvVal}>
-                  {formatQty(item.quantity, item.unit)}
-                </Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.kvKey}>Entry</Text>
-                <Text style={styles.kvVal}>{formatDate(item.entry_date)}</Text>
-                <Text style={styles.kvKey}>Due</Text>
-                <Text style={styles.kvVal}>{formatDate(item.due_date)}</Text>
-              </View>
-              <View style={styles.kvRow}>
-                <Text style={styles.kvKey}>SLA</Text>
-                <Text style={styles.kvVal}>
-                  {typeof item.sla_total_days === "number"
-                    ? `${item.sla_total_days}d`
-                    : slaTotalDays(item.entry_date, item.due_date) != null
-                      ? `${slaTotalDays(item.entry_date, item.due_date)}d`
-                      : "-"}
-                </Text>
-                <Text style={styles.kvKey}>Dept</Text>
-                <Text style={styles.kvVal} numberOfLines={1}>
-                  {fmt(item.current_department_name)}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={styles.kvKey}>Driver</Text>
-                <Text style={styles.kvVal} numberOfLines={1}>
-                  {fmt(item.driver_name)}
-                </Text>
-                <Text style={styles.kvKey}>Vehicle</Text>
-                <Text style={styles.kvVal} numberOfLines={1}>
-                  {fmt(item.vehicle_details)}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={styles.kvKey}>Holder</Text>
-                <Text style={styles.kvVal} numberOfLines={1}>
-                  {formatHolderLine(item)}
-                </Text>
-                <Text style={styles.kvKey}>Photo</Text>
-                <Text style={styles.kvVal}>{item.photo_path ? "Yes" : "-"}</Text>
-              </View>
-
-              {item.remarks ? (
-                <View style={styles.remarks}>
-                  <Text style={styles.remarksTitle}>Remarks</Text>
-                  <Text style={styles.remarksText} numberOfLines={4}>
-                    {String(item.remarks)}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          )}
+          renderItem={renderRecord}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          {...FLATLIST_PERF}
           ListEmptyComponent={
-            <Text style={styles.empty}>No open records in this slice. Pull to refresh.</Text>
+            <EmptyState
+              icon="folder-open-outline"
+              title="No records found"
+              message="Try adjusting filters or pull to refresh."
+            />
           }
           ListFooterComponent={
             canLoadMore ? (
@@ -652,7 +528,10 @@ export function RecordsScreen({ navigation }) {
               </Text>
             )
           }
-          contentContainerStyle={records.length === 0 ? styles.emptyWrap : styles.listPad}
+          contentContainerStyle={[
+            records.length === 0 ? styles.emptyWrap : styles.listPad,
+            { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" },
+          ]}
         />
       )}
       {datePicker ? (
@@ -672,6 +551,7 @@ export function RecordsScreen({ navigation }) {
           />
         </View>
       ) : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -680,6 +560,13 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: theme.colors.bg,
+  },
+  flex: { flex: 1 },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.space.xs,
+    paddingBottom: theme.space.sm,
   },
   header: {
     flexDirection: "row",
@@ -835,7 +722,7 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     backgroundColor: "#fff",
   },
-  chipOn: { backgroundColor: "#0ea5e9", borderColor: "#0ea5e9" },
+  chipOn: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
   chipText: { fontSize: 11, fontWeight: "900", color: "#0f172a" },
   chipTextOn: { color: "#fff" },
   filterGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
@@ -905,8 +792,8 @@ const styles = StyleSheet.create({
   filterBtnGhostText: { color: "#334155", fontWeight: "900" },
   filterBtnPrimary: {
     flex: 1,
-    backgroundColor: "#15803d",
-    borderRadius: 10,
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.sm,
     paddingVertical: 12,
     alignItems: "center",
   },
@@ -914,6 +801,7 @@ const styles = StyleSheet.create({
   listPad: {
     paddingVertical: 8,
   },
+  cardWrap: {},
   row: {
     backgroundColor: "#fff",
     marginHorizontal: 12,

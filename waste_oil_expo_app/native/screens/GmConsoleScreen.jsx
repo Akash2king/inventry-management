@@ -1,10 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +16,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 import { fromByteArray } from "base64-js";
+import { theme } from "../theme.js";
+import { KeyboardAwareScroll } from "../components/ui/KeyboardAwareScroll.jsx";
+import { useScrollContentStyle } from "../utils/responsive.js";
+import { useResponsiveType } from "../utils/typography.js";
+import { showSuccess, showError, showConfirm } from "../utils/feedback.js";
 
 const ROLE_OPTIONS = [
   { value: "storeman", label: "Storeman", layer: "peer" },
@@ -51,6 +54,7 @@ async function ensureDocsDir() {
 
 export function GmConsoleScreen({ navigation }) {
   const { api, user } = useAuth();
+  const scrollStyle = useScrollContentStyle({ gap: 12 });
   const canView = user && (user.role === "gm" || user.role === "superadmin");
 
   const [tab, setTab] = useState("overview");
@@ -136,9 +140,9 @@ export function GmConsoleScreen({ navigation }) {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share monthly report" });
       }
-      Alert.alert("Saved", `Saved to Documents:\n${uri}`);
+      showSuccess("Saved to Documents");
     } catch (e) {
-      Alert.alert("Failed", e?.message || "PDF download failed");
+      showError(e?.message || "PDF download failed");
     }
   }
 
@@ -211,9 +215,9 @@ export function GmConsoleScreen({ navigation }) {
           dialogTitle: "Share monthly report",
         });
       }
-      Alert.alert("Saved", `Saved to Documents:\n${uri}`);
+      showSuccess("Saved to Documents");
     } catch (e) {
-      Alert.alert("Failed", e?.message || "Excel export failed");
+      showError(e?.message || "Excel export failed");
     }
   }
 
@@ -230,10 +234,9 @@ export function GmConsoleScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
+      <KeyboardAwareScroll
+        contentContainerStyle={scrollStyle}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadAll("refresh")} />}
-        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.head}>
           <View style={{ flex: 1 }}>
@@ -396,7 +399,7 @@ export function GmConsoleScreen({ navigation }) {
             departments={departments}
           />
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }
@@ -413,11 +416,11 @@ function DepartmentModal({ modal, onClose, onSaved, api }) {
   async function submit() {
     const st = Number(order);
     if (!name.trim() || !code.trim()) {
-      Alert.alert("Missing", "Name and code are required.");
+      showError("Name and code are required.");
       return;
     }
     if (!Number.isFinite(st) || st < 1) {
-      Alert.alert("Invalid", "Stage order must be at least 1.");
+      showError("Stage order must be at least 1.");
       return;
     }
     setBusy(true);
@@ -430,7 +433,7 @@ function DepartmentModal({ modal, onClose, onSaved, api }) {
       if (!res.ok) throw new Error(res.error || "Save failed");
       onSaved();
     } catch (e) {
-      Alert.alert("Failed", e?.message || "Save failed");
+      showError(e?.message || "Save failed");
     } finally {
       setBusy(false);
     }
@@ -438,22 +441,22 @@ function DepartmentModal({ modal, onClose, onSaved, api }) {
 
   async function remove() {
     if (mode !== "edit") return;
-    Alert.alert("Delete department", `Delete "${row?.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const res = await api.gm.deleteDepartment(row.id);
-            if (!res.ok) throw new Error(res.error || "Delete failed");
-            onSaved();
-          } catch (e) {
-            Alert.alert("Failed", e?.message || "Delete failed");
-          }
-        },
+    showConfirm({
+      title: "Delete department",
+      message: `Delete "${row?.name}"?`,
+      confirmText: "Delete",
+      destructive: true,
+      icon: "trash-outline",
+      onConfirm: async () => {
+        try {
+          const res = await api.gm.deleteDepartment(row.id);
+          if (!res.ok) throw new Error(res.error || "Delete failed");
+          onSaved();
+        } catch (e) {
+          showError(e?.message || "Delete failed");
+        }
       },
-    ]);
+    });
   }
 
   return (
@@ -512,16 +515,16 @@ function EmployeeModal({ modal, onClose, onSaved, api, departments }) {
 
   async function submit() {
     if (!email.trim()) {
-      Alert.alert("Missing", "Email is required.");
+      showError("Email is required.");
       return;
     }
     if (mode === "create" && (!password || password.length < 8)) {
-      Alert.alert("Weak password", "Password must be at least 8 characters.");
+      showError("Password must be at least 8 characters.");
       return;
     }
     const department = deptId || suggestedDeptId;
     if (!department) {
-      Alert.alert("Missing", "No department available. Create departments first.");
+      showError("No department available. Create departments first.");
       return;
     }
 
@@ -552,7 +555,7 @@ function EmployeeModal({ modal, onClose, onSaved, api, departments }) {
       }
       onSaved();
     } catch (e) {
-      Alert.alert("Failed", e?.message || "Save failed");
+      showError(e?.message || "Save failed");
     } finally {
       setBusy(false);
     }
@@ -560,22 +563,22 @@ function EmployeeModal({ modal, onClose, onSaved, api, departments }) {
 
   async function remove() {
     if (mode !== "edit") return;
-    Alert.alert("Remove user", `Remove "${row?.username}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const res = await api.gm.deleteEmployee(row.id);
-            if (!res.ok) throw new Error(res.error || "Remove failed");
-            onSaved();
-          } catch (e) {
-            Alert.alert("Failed", e?.message || "Remove failed");
-          }
-        },
+    showConfirm({
+      title: "Remove user",
+      message: `Remove "${row?.username}"?`,
+      confirmText: "Remove",
+      destructive: true,
+      icon: "person-remove-outline",
+      onConfirm: async () => {
+        try {
+          const res = await api.gm.deleteEmployee(row.id);
+          if (!res.ok) throw new Error(res.error || "Remove failed");
+          onSaved();
+        } catch (e) {
+          showError(e?.message || "Remove failed");
+        }
       },
-    ]);
+    });
   }
 
   return (
@@ -655,8 +658,16 @@ const styles = StyleSheet.create({
   btnGhostText: { color: "#334155", fontWeight: "900" },
   error: { padding: 12, borderRadius: 12, backgroundColor: "rgba(239,68,68,0.10)", borderWidth: 1, borderColor: "rgba(239,68,68,0.25)" },
   errorText: { color: "#b91c1c", fontWeight: "800" },
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16, gap: 8, borderWidth: 1, borderColor: "#e2e8f0" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.45)", justifyContent: "flex-end" },
+  modalCard: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    padding: theme.space.lg,
+    gap: theme.space.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
   modalTitle: { fontSize: 16, fontWeight: "900", color: "#0f172a" },
 });
 

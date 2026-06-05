@@ -146,9 +146,26 @@ tmp/
 temp/
 *.tmp
 
-# Firebase Android (do not commit real keys)
-waste_oil_expo_app/google-services.json
+# ======================
+# Secrets & Credentials (never commit)
+# ======================
+# Firebase Android client config
+google-services.json
+**/google-services.json
+
+# Firebase Admin SDK / Google Cloud service account JSONs
+**/*-firebase-adminsdk-*.json
+**/firebase-adminsdk*.json
 waste_oil_expo_app/credentials/
+
+# Android signing keys (never commit)
+*.jks
+*.keystore
+**/ANDROID_KEYSTORE_BASE64.txt
+
+# Accidental local/broken virtualenv copies
+**/.venv.windows-broken/
+.venv.windows-broken/
 
 # ======================
 # Workspace Files (Machine-Specific)

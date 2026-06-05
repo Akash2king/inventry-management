@@ -1,9 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,9 +9,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
+import { theme } from "../theme.js";
+import { Button } from "../components/ui/Button.jsx";
+import { KeyboardAwareScroll } from "../components/ui/KeyboardAwareScroll.jsx";
+import { showSuccess, showError, showBlockingError } from "../utils/feedback.js";
+import { useScrollContentStyle } from "../utils/responsive.js";
+import { useResponsiveType } from "../utils/typography.js";
 
 export function ChangePasswordScreen({ navigation }) {
   const { api, user, refreshUser, logout } = useAuth();
+  const scrollStyle = useScrollContentStyle();
+  const type = useResponsiveType();
   const mustChange = Boolean(user?.must_change_password);
 
   const [current, setCurrent] = useState("");
@@ -32,19 +37,19 @@ export function ChangePasswordScreen({ navigation }) {
 
   async function onSubmit() {
     if (!api) {
-      Alert.alert("API not set", "Open Settings and set the API base URL first.");
+      showBlockingError("API not set", "Open Settings and set the API base URL first.");
       return;
     }
     if (!current) {
-      Alert.alert("Missing", "Enter your current password.");
+      showError("Enter your current password.");
       return;
     }
     if (next.length < 8) {
-      Alert.alert("Too short", "New password must be at least 8 characters.");
+      showError("New password must be at least 8 characters.");
       return;
     }
     if (next !== confirm) {
-      Alert.alert("Mismatch", "New password and confirmation do not match.");
+      showError("New password and confirmation do not match.");
       return;
     }
 
@@ -58,10 +63,10 @@ export function ChangePasswordScreen({ navigation }) {
         throw new Error(res.error || "Could not update password");
       }
       await refreshUser();
-      Alert.alert("Updated", "Password updated successfully.");
+      showSuccess("Password updated successfully.");
       navigation.replace("Home");
     } catch (e) {
-      Alert.alert("Failed", e?.message || "Could not update password");
+      showError(e?.message || "Could not update password");
     } finally {
       setBusy(false);
     }
@@ -74,20 +79,16 @@ export function ChangePasswordScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>{mustChange ? "Set a new password" : "Change password"}</Text>
-          <Text style={styles.help}>
+      <KeyboardAwareScroll contentContainerStyle={scrollStyle}>
+          <Text style={[styles.title, type.title]}>{mustChange ? "Set a new password" : "Change password"}</Text>
+          <Text style={[styles.help, type.body]}>
             {mustChange
               ? "For security, you must change your password before using the rest of the app."
               : "Update your password anytime."}
           </Text>
 
           <View style={styles.card}>
-            <Text style={styles.label}>Current password</Text>
+            <Text style={[styles.label, type.label]}>Current password</Text>
             <TextInput
               value={current}
               onChangeText={setCurrent}
@@ -96,10 +97,10 @@ export function ChangePasswordScreen({ navigation }) {
               autoCorrect={false}
               placeholder={mustChange ? "From your welcome email" : "Current password"}
               placeholderTextColor="#94a3b8"
-              style={styles.input}
+              style={[styles.input, type.input, type.inputPad]}
             />
 
-            <Text style={styles.label}>New password</Text>
+            <Text style={[styles.label, type.label]}>New password</Text>
             <TextInput
               value={next}
               onChangeText={setNext}
@@ -108,10 +109,10 @@ export function ChangePasswordScreen({ navigation }) {
               autoCorrect={false}
               placeholder="At least 8 characters"
               placeholderTextColor="#94a3b8"
-              style={styles.input}
+              style={[styles.input, type.input, type.inputPad]}
             />
 
-            <Text style={styles.label}>Confirm new password</Text>
+            <Text style={[styles.label, type.label]}>Confirm new password</Text>
             <TextInput
               value={confirm}
               onChangeText={setConfirm}
@@ -120,16 +121,15 @@ export function ChangePasswordScreen({ navigation }) {
               autoCorrect={false}
               placeholder="Repeat new password"
               placeholderTextColor="#94a3b8"
-              style={styles.input}
+              style={[styles.input, type.input, type.inputPad]}
             />
 
-            <TouchableOpacity
-              style={[styles.btn, (!canSubmit || busy) && styles.btnDisabled]}
-              disabled={!canSubmit || busy}
+            <Button
+              title="Update password"
               onPress={() => void onSubmit()}
-            >
-              <Text style={styles.btnText}>{busy ? "Updating…" : "Update password"}</Text>
-            </TouchableOpacity>
+              loading={busy}
+              disabled={!canSubmit || busy}
+            />
 
             {!mustChange ? (
               <TouchableOpacity style={styles.btnGhost} onPress={() => navigation.goBack()}>
@@ -142,12 +142,11 @@ export function ChangePasswordScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.foot}>
+          <Text style={[styles.foot, type.caption]}>
             {user?.username ? `Signed in as ${user.username}` : ""}{" "}
             {mustChange ? "Required step for new accounts." : "Use a strong password you do not reuse elsewhere."}
           </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

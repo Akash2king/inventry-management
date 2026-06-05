@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import {
-  Alert,
   Linking,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -16,12 +14,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { saveApiBase, suggestLanPlaceholder } from "../apiConfig.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
-  registerWorkflowPushToken,
-  requestWorkflowNotificationPermissions,
-} from "../systemNotifications.js";
+  registerPushWithBackend,
+  requestPushPermission,
+} from "../oneSignalService.js";
 import { theme } from "../theme.js";
+import { Button, KeyboardAwareScroll, PageHeader } from "../components/ui/index.js";
+import { showSuccess, showError, showAlert, showConfirm } from "../utils/feedback.js";
+import { useScrollContentStyle } from "../utils/responsive.js";
+import { useResponsiveType } from "../utils/typography.js";
 
-function ActionRow({ icon, label, onPress, danger }) {
+function ActionRow({ icon, label, onPress, danger, type }) {
   return (
     <TouchableOpacity
       style={[styles.actionRow, danger && { borderColor: "rgba(239,68,68,0.35)" }]}
@@ -30,7 +32,7 @@ function ActionRow({ icon, label, onPress, danger }) {
       <View style={[styles.actionIconWrap, danger && styles.actionIconWrapDanger]}>
         <Ionicons name={icon} size={18} color={danger ? "#b91c1c" : theme.colors.accentHover} />
       </View>
-      <Text style={[styles.actionText, danger && { color: "#b91c1c" }]}>{label}</Text>
+      <Text style={[styles.actionText, type.h3, danger && { color: "#b91c1c" }]}>{label}</Text>
       <View style={{ flex: 1 }} />
       <Ionicons name="chevron-forward" size={18} color={danger ? "rgba(185,28,28,0.6)" : "rgba(15,23,42,0.4)"} />
     </TouchableOpacity>
@@ -39,6 +41,8 @@ function ActionRow({ icon, label, onPress, danger }) {
 
 export function SettingsScreen({ navigation }) {
   const { apiBase, applyApiBase, user, logout, api } = useAuth();
+  const type = useResponsiveType();
+  const scrollStyle = useScrollContentStyle({ gap: 14, paddingTop: 0 });
   const [url, setUrl] = useState(apiBase || "");
   const [saving, setSaving] = useState(false);
 
@@ -47,46 +51,42 @@ export function SettingsScreen({ navigation }) {
     try {
       const trimmed = await saveApiBase(url);
       await applyApiBase(trimmed);
-      Alert.alert("Saved", "API base URL updated. Login again if your session expired.");
-      navigation.goBack();
+      showSuccess("API base URL updated.");
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
     } catch (e) {
-      Alert.alert("Could not save", e?.message || "Unknown error");
+      showError(e?.message || "Could not save");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.bg} />
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.heroCard}>
-          <View style={styles.heroIconWrap}>
-            <Ionicons name="settings-outline" size={24} color={theme.colors.accentHover} />
-          </View>
-          <Text style={styles.kicker}>Settings</Text>
-          <Text style={styles.title}>Personalize the app</Text>
-          <Text style={styles.subtitle}>
-            Update the connection used by this device and access your account tools from one simple screen.
-          </Text>
-        </View>
+      <KeyboardAwareScroll contentContainerStyle={scrollStyle}>
+        <PageHeader
+          title="Settings"
+          subtitle="Connection, account, and device tools"
+        />
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={styles.sectionTitle}>Connection</Text>
-              <Text style={styles.sectionHint}>Keep this pointed at your office/backend server.</Text>
+              <Text style={[styles.sectionTitle, type.h2]}>Connection</Text>
+              <Text style={[styles.sectionHint, type.body]}>Keep this pointed at your office/backend server.</Text>
             </View>
             <View style={styles.pill}>
-              <Text style={styles.pillText}>LAN</Text>
+              <Text style={[styles.pillText, type.micro]}>LAN</Text>
             </View>
           </View>
 
-          <Text style={styles.help}>
+          <Text style={[styles.help, type.body]}>
             If the app is used on the same network, this should match your backend IP address.
           </Text>
-          <Text style={styles.mono}>{suggestLanPlaceholder()}</Text>
-          <Text style={styles.label}>API base URL</Text>
+          <Text style={[styles.mono, type.caption]}>{suggestLanPlaceholder()}</Text>
+          <Text style={[styles.label, type.label]}>API base URL</Text>
           <TextInput
             value={url}
             onChangeText={setUrl}
@@ -94,23 +94,22 @@ export function SettingsScreen({ navigation }) {
             autoCorrect={false}
             placeholder={`e.g. ${suggestLanPlaceholder()}`}
             placeholderTextColor="#94a3b8"
-            style={styles.input}
+            style={[styles.input, type.input, type.inputPad]}
           />
-          <TouchableOpacity
-            style={[styles.btn, saving && styles.btnDisabled]}
+          <Button
+            title="Save connection"
             onPress={() => void handleSave()}
+            loading={saving}
             disabled={saving}
-          >
-            <Text style={styles.btnText}>{saving ? "Saving…" : "Save connection"}</Text>
-          </TouchableOpacity>
+          />
         </View>
 
         {user ? (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionTitle}>Account</Text>
-                <Text style={styles.sectionHint}>Signed in user and app shortcuts.</Text>
+                <Text style={[styles.sectionTitle, type.h2]}>Account</Text>
+                <Text style={[styles.sectionHint, type.body]}>Signed in user and app shortcuts.</Text>
               </View>
               <View style={styles.accountBadge}>
                 <Text style={styles.accountBadgeText}>{(user.full_name || user.username || "U").slice(0, 2).toUpperCase()}</Text>
@@ -118,43 +117,48 @@ export function SettingsScreen({ navigation }) {
             </View>
 
             <View style={styles.accountCard}>
-              <Text style={styles.accountName}>{user.full_name || user.username}</Text>
-              <Text style={styles.accountMeta}>{user.role || "User"}</Text>
+              <Text style={[styles.accountName, type.h3]}>{user.full_name || user.username}</Text>
+              <Text style={[styles.accountMeta, type.body]}>{user.role || "User"}</Text>
             </View>
 
             <ActionRow
               icon="key-outline"
               label="Change password"
+              type={type}
               onPress={() => navigation.navigate("ChangePassword")}
             />
 
             <ActionRow
               icon="phone-portrait-outline"
               label="Devices"
+              type={type}
               onPress={() => navigation.navigate("Sessions")}
             />
             <ActionRow
               icon="notifications-outline"
               label="Workflow notifications"
+              type={type}
               onPress={() => navigation.navigate("InAppNotifications")}
             />
 
             <ActionRow
               icon="megaphone-outline"
               label="Re-request push permission"
+              type={type}
               onPress={() => {
                 void (async () => {
-                  await requestWorkflowNotificationPermissions();
+                  await requestPushPermission();
                   if (api) {
-                    await registerWorkflowPushToken(api);
+                    await registerPushWithBackend(api);
                   }
-                  Alert.alert(
+                  showAlert(
                     "Notifications",
                     "If the system denied access earlier, open system settings for this app and enable notifications.",
                     [
-                      { text: "OK", style: "default" },
-                      { text: "Open settings", onPress: () => void Linking.openSettings() },
+                      { text: "OK", style: "cancel" },
+                      { text: "Open settings", style: "default", onPress: () => void Linking.openSettings() },
                     ],
+                    { icon: "notifications-outline" },
                   );
                 })();
               }}
@@ -164,14 +168,16 @@ export function SettingsScreen({ navigation }) {
               <ActionRow
                 icon="battery-charging-outline"
                 label="Battery & background (Android)"
+                type={type}
                 onPress={() => {
-                  Alert.alert(
+                  showAlert(
                     "Reliable background delivery",
                     "Open App info → Battery (or Power) and set this app to Unrestricted. That helps background inbox checks and avoids delayed alerts on some devices.",
                     [
                       { text: "Cancel", style: "cancel" },
-                      { text: "Open app settings", onPress: () => void Linking.openSettings() },
+                      { text: "Open app settings", style: "default", onPress: () => void Linking.openSettings() },
                     ],
+                    { icon: "battery-charging-outline", variant: "warning" },
                   );
                 }}
               />
@@ -181,6 +187,7 @@ export function SettingsScreen({ navigation }) {
               <ActionRow
                 icon="shield-checkmark-outline"
                 label="Audit logs"
+                type={type}
                 onPress={() => navigation.navigate("AuditLogs")}
               />
             ) : null}
@@ -189,6 +196,7 @@ export function SettingsScreen({ navigation }) {
               <ActionRow
                 icon="construct-outline"
                 label="GM console"
+                type={type}
                 onPress={() => navigation.navigate("GmConsole")}
               />
             ) : null}
@@ -196,24 +204,25 @@ export function SettingsScreen({ navigation }) {
             <ActionRow
               icon="log-out-outline"
               label="Sign out"
+              type={type}
               danger
               onPress={() => {
-                Alert.alert("Sign out", "Do you want to sign out?", [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Sign out",
-                    style: "destructive",
-                    onPress: async () => {
-                      await logout().catch(() => {});
-                      navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] });
-                    },
+                showConfirm({
+                  title: "Sign out",
+                  message: "Do you want to sign out of this device?",
+                  confirmText: "Sign out",
+                  cancelText: "Cancel",
+                  destructive: true,
+                  onConfirm: async () => {
+                    await logout().catch(() => {});
+                    navigation.getParent()?.reset({ index: 0, routes: [{ name: "Login" }] });
                   },
-                ]);
+                });
               }}
             />
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }
@@ -242,7 +251,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(59, 130, 246, 0.10)",
+    backgroundColor: theme.colors.accentMuted,
   },
   kicker: {
     fontSize: 12,
@@ -275,22 +284,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  sectionHint: { fontSize: 13, color: theme.colors.text, marginTop: 2 },
+  sectionHint: { color: theme.colors.text, marginTop: 2 },
   pill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(59, 130, 246, 0.10)",
+    backgroundColor: theme.colors.accentMuted,
   },
-  pillText: { fontSize: 11, fontWeight: "800", color: theme.colors.accentHover, letterSpacing: 0.4 },
+  pillText: { fontWeight: "800", color: theme.colors.accentHover, letterSpacing: 0.4 },
   help: {
-    fontSize: 14,
     color: theme.colors.text,
-    lineHeight: 21,
   },
   mono: {
     fontFamily: "monospace",
-    fontSize: 13,
     color: theme.colors.accentHover,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
@@ -300,19 +306,12 @@ const styles = StyleSheet.create({
   },
   label: {
     marginTop: 8,
-    fontSize: 13,
-    fontWeight: "600",
-    color: theme.colors.textBright,
   },
   input: {
     marginTop: 6,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 14 : 10,
-    fontSize: 16,
-    color: theme.colors.textBright,
     backgroundColor: theme.colors.surface,
   },
   btn: {
@@ -330,12 +329,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 16,
   },
-  sectionTitle: { fontSize: 17, fontWeight: "800", color: theme.colors.textBright },
+  sectionTitle: { fontWeight: "800", color: theme.colors.textBright },
   accountBadge: {
     width: 42,
     height: 42,
     borderRadius: 999,
-    backgroundColor: "rgba(59, 130, 246, 0.12)",
+    backgroundColor: theme.colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -347,8 +346,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  accountName: { fontSize: 15, fontWeight: "800", color: theme.colors.textBright },
-  accountMeta: { marginTop: 4, fontSize: 13, color: theme.colors.text, textTransform: "capitalize" },
+  accountName: { fontWeight: "800", color: theme.colors.textBright },
+  accountMeta: { marginTop: 4, color: theme.colors.text, textTransform: "capitalize" },
   actionRow: {
     marginTop: 10,
     borderWidth: 1,
@@ -367,10 +366,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(59, 130, 246, 0.08)",
+    backgroundColor: theme.colors.accentSoft,
   },
   actionIconWrapDanger: {
     backgroundColor: "rgba(239, 68, 68, 0.08)",
   },
-  actionText: { color: theme.colors.textBright, fontWeight: "900", fontSize: 15 },
+  actionText: { color: theme.colors.textBright, fontWeight: "900" },
 });

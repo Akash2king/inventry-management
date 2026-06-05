@@ -36,6 +36,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     borderWidth: 1,
   },
-  text: { fontSize: 11, fontWeight: "900" },
+  text: { fontSize: 11, fontWeight: "600", letterSpacing: 0.2 },
 });
 

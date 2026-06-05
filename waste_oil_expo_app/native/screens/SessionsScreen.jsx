@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } f
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
 import { theme } from "../theme.js";
+import { useResponsive } from "../utils/responsive.js";
 
 function formatTs(iso) {
   const d = new Date(iso);
@@ -17,6 +18,7 @@ function clientLabel(kind) {
 
 export function SessionsScreen() {
   const { api } = useAuth();
+  const { contentMaxWidth, horizontalPad } = useResponsive();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +59,10 @@ export function SessionsScreen() {
           data={rows}
           keyExtractor={(item) => String(item.id)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load("refresh")} />}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%", paddingHorizontal: horizontalPad },
+          ]}
           ListEmptyComponent={<Text style={styles.empty}>No active sessions.</Text>}
           renderItem={({ item: s }) => (
             <View style={styles.card}>
@@ -84,7 +89,7 @@ export function SessionsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  list: { padding: 16, gap: 12 },
+  list: { paddingVertical: 16, gap: 12 },
   empty: { textAlign: "center", opacity: 0.7, marginTop: 24 },
   card: {
     borderWidth: 1,

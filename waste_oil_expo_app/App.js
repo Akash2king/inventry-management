@@ -1,7 +1,15 @@
 /**
  * Chem-Solv Inventory — native Expo shell (React Navigation + REST API).
- * The Vite/React web UI is no longer embedded in WebView.
+ * OneSignal: https://documentation.onesignal.com/docs/en/react-native-expo-sdk-setup
  */
+import { useEffect } from "react";
+import { initializeOneSignal } from "./native/oneSignalService.js";
 import NativeRoot from "./native/NativeRoot.jsx";
 
-export default NativeRoot;
+export default function App() {
+  useEffect(() => {
+    initializeOneSignal();
+  }, []);
+
+  return <NativeRoot />;
+}

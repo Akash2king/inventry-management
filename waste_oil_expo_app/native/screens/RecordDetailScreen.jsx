@@ -3,14 +3,15 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
@@ -19,7 +20,10 @@ import { formatHolderLine } from "../../src/utils/holderDisplay.js";
 import { STAGE_LABELS } from "../../src/utils/stageLabels.js";
 import { nextStageName, prevStageName } from "../../src/utils/stageLabels.js";
 import { theme } from "../theme.js";
+import { showSuccess, showError, showBlockingError } from "../utils/feedback.js";
+import { EmptyState, KeyboardAwareScroll, LoadingBlock, ModalHeader, ModalShell } from "../components/ui/index.js";
 import { diffDays, formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
+import { useScrollContentStyle } from "../utils/responsive.js";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { fromByteArray } from "base64-js";
@@ -68,6 +72,7 @@ function actorLabel(t) {
 
 export function RecordDetailScreen({ navigation, route }) {
   const { recordId } = route.params || {};
+  const scrollStyle = useScrollContentStyle({ gap: 12 });
   const autoOpen = route.params?.autoOpen || "";
   const { api, user } = useAuth();
   const mustChangePassword = Boolean(user?.must_change_password);
@@ -95,7 +100,7 @@ export function RecordDetailScreen({ navigation, route }) {
     if (res.ok && res.data) setRecord(res.data);
     else {
       setRecord(null);
-      Alert.alert("Could not load record", res.error || "Unknown error");
+      showBlockingError("Could not load record", res.error || "Unknown error");
     }
     if (tr.ok && Array.isArray(tr.data)) setTransitions(tr.data);
     else setTransitions([]);
@@ -149,7 +154,7 @@ export function RecordDetailScreen({ navigation, route }) {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(photoUri, { dialogTitle: "Share entry photo" });
       } else {
-        Alert.alert("Saved", `Saved to cache:\n${photoUri}`);
+        showSuccess("Photo saved to cache");
       }
     } finally {
       setPhotoBusy(false);
@@ -169,9 +174,9 @@ export function RecordDetailScreen({ navigation, route }) {
       setFwdNote("");
       setSelectedCandidateId("");
       await load();
-      Alert.alert("Forwarded", "Workflow updated.");
+      showSuccess("Record forwarded.");
     } else {
-      Alert.alert("Forward failed", res.error || "");
+      showError(res.error || "Forward failed");
     }
   }
 
@@ -184,9 +189,9 @@ export function RecordDetailScreen({ navigation, route }) {
       setRetOpen(false);
       setRetReason("");
       await load();
-      Alert.alert("Returned", "Workflow updated.");
+      showSuccess("Record returned.");
     } else {
-      Alert.alert("Return failed", res.error || "");
+      showError(res.error || "Return failed");
     }
   }
 
@@ -237,23 +242,27 @@ export function RecordDetailScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <LoadingBlock message="Loading record…" fullScreen />
+      </SafeAreaView>
     );
   }
 
   if (!record) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.muted}>Record not found.</Text>
-      </View>
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <EmptyState
+          icon="document-outline"
+          title="Record not found"
+          message="It may have been removed or you may not have access."
+        />
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <KeyboardAwareScroll contentContainerStyle={scrollStyle}>
         <Text style={styles.title}>{record.record_number}</Text>
 
         {needsCorrection && !locked ? (
@@ -451,16 +460,11 @@ export function RecordDetailScreen({ navigation, route }) {
             <Text style={styles.fullTimelineText}>View full timeline</Text>
           </TouchableOpacity>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScroll>
 
       <Modal visible={photoModal} animationType="slide" onRequestClose={() => setPhotoModal(false)}>
-        <SafeAreaView style={styles.pickerSafe} edges={["bottom"]}>
-          <View style={styles.pickerHead}>
-            <Text style={styles.pickerTitle}>Entry photo</Text>
-            <TouchableOpacity onPress={() => setPhotoModal(false)}>
-              <Text style={styles.pickerClose}>Close</Text>
-            </TouchableOpacity>
-          </View>
+        <ModalShell style={styles.pickerSafe}>
+          <ModalHeader title="Entry photo" onClose={() => setPhotoModal(false)} />
           <View style={{ flex: 1, backgroundColor: "#0b1220", justifyContent: "center" }}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photoFull} resizeMode="contain" />
@@ -473,7 +477,7 @@ export function RecordDetailScreen({ navigation, route }) {
               <Text style={styles.primaryTxt}>{photoBusy ? "…" : "Share / download"}</Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </ModalShell>
       </Modal>
 
       <Modal
@@ -488,7 +492,7 @@ export function RecordDetailScreen({ navigation, route }) {
           else setCandidates([]);
         }}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Forward</Text>
             <Text style={styles.modalHint}>Next stage: {nextStage}</Text>
@@ -521,11 +525,11 @@ export function RecordDetailScreen({ navigation, route }) {
               <Text style={styles.ghostTxt}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={retOpen} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Return</Text>
             {prevStage ? <Text style={styles.modalHint}>Back to: {prevStage}</Text> : null}
@@ -548,18 +552,17 @@ export function RecordDetailScreen({ navigation, route }) {
               <Text style={styles.ghostTxt}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={candidatePickerOpen} animationType="slide" onRequestClose={() => setCandidatePickerOpen(false)}>
-        <SafeAreaView style={styles.pickerSafe} edges={["bottom"]}>
-          <View style={styles.pickerHead}>
-            <Text style={styles.pickerTitle}>Choose next holder</Text>
-            <TouchableOpacity onPress={() => setCandidatePickerOpen(false)}>
-              <Text style={styles.pickerClose}>Close</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={styles.pickerList}>
+        <ModalShell style={styles.pickerSafe}>
+          <ModalHeader title="Choose next holder" onClose={() => setCandidatePickerOpen(false)} />
+          <ScrollView
+            contentContainerStyle={styles.pickerList}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
             <TouchableOpacity
               style={styles.pickerRow}
               onPress={() => {
@@ -589,7 +592,7 @@ export function RecordDetailScreen({ navigation, route }) {
               <Text style={styles.mutedSmall}>No forward candidates available for this stage.</Text>
             ) : null}
           </ScrollView>
-        </SafeAreaView>
+        </ModalShell>
       </Modal>
     </SafeAreaView>
   );
@@ -801,20 +804,24 @@ const styles = StyleSheet.create({
   dangerTxt: { color: "#fff", fontWeight: "900" },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    padding: 24,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "flex-end",
   },
   modalCard: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 16,
-    padding: 20,
-    gap: 12,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    paddingHorizontal: theme.space.lg,
+    paddingTop: theme.space.lg,
+    paddingBottom: theme.space.xl,
+    gap: theme.space.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadow.md,
   },
   modalTitle: {
+    ...theme.type.h2,
     fontSize: 18,
-    fontWeight: "800",
-    color: theme.colors.textBright,
   },
   modalHint: {
     marginTop: -6,
@@ -843,9 +850,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   modalPrimary: {
-    backgroundColor: theme.colors.accentHover,
+    backgroundColor: theme.colors.accent,
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: theme.radius.md,
     alignItems: "center",
   },
   modalGhost: {

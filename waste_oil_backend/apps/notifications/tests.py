@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import CustomUser, Department
-from apps.notifications.expo_push import expo_push_data_for_navigation, is_expo_push_token
+from apps.notifications.onesignal_push import push_data_for_navigation
 from apps.notifications.models import UserNotification
 from apps.notifications.services import NotificationService
 from apps.records.models import Vendor, WasteOilRecord
@@ -178,14 +178,9 @@ class NotificationListWorkflowOnlyTests(TestCase):
         self.assertEqual(len(ids), 1)
 
 
-class ExpoPushNavigationDataTests(TestCase):
-    def test_is_expo_push_token(self):
-        self.assertTrue(is_expo_push_token("ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"))
-        self.assertTrue(is_expo_push_token("ExpoPushToken[yyyy]"))
-        self.assertFalse(is_expo_push_token("native-fcm-token"))
-
+class OneSignalPushNavigationDataTests(TestCase):
     def test_record_payload(self):
-        d = expo_push_data_for_navigation(
+        d = push_data_for_navigation(
             {"kind": "record_forwarded", "record_id": "abc-uuid", "record_number": "INV-99"}
         )
         self.assertEqual(d["screen"], "RecordDetail")
@@ -194,9 +189,9 @@ class ExpoPushNavigationDataTests(TestCase):
         self.assertEqual(d["kind"], "record_forwarded")
 
     def test_monthly_report_payload(self):
-        d = expo_push_data_for_navigation({"kind": "monthly_report"})
+        d = push_data_for_navigation({"kind": "monthly_report"})
         self.assertEqual(d["screen"], "GmConsole")
 
     def test_default_in_app_payload(self):
-        d = expo_push_data_for_navigation({"kind": "custom_broadcast"})
+        d = push_data_for_navigation({"kind": "custom_broadcast"})
         self.assertEqual(d["screen"], "InAppNotifications")

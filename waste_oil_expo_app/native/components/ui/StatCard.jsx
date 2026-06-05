@@ -15,98 +15,60 @@ export function StatCard({ icon, label, value, selected, onPress, style }) {
       ]}
       accessibilityRole="button"
       accessibilityState={{ selected: Boolean(selected) }}
-      hitSlop={8}
+      hitSlop={6}
     >
-      {selected ? <View style={styles.activeRail} /> : null}
       <View style={styles.top}>
-        <View style={styles.left}>
-          <View style={[styles.iconWrap, selected && styles.iconWrapOn]}>
-            <Ionicons name={icon} size={16} color={selected ? "#fff" : theme.colors.textBright} />
-          </View>
-          <Text
-            style={[styles.label, selected && styles.labelOn]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {label}
-          </Text>
+        <View style={[styles.iconWrap, selected && styles.iconWrapOn]}>
+          <Ionicons name={icon} size={15} color={selected ? theme.colors.textInverse : theme.colors.text} />
         </View>
-      </View>
-      <View style={styles.valueWrap} pointerEvents="none">
-        <Text style={[styles.value, selected && styles.valueOn]} numberOfLines={1}>
-          {String(value ?? "-")}
+        <Text style={[styles.label, selected && styles.labelOn]} numberOfLines={1}>
+          {label}
         </Text>
       </View>
+      <Text style={[styles.value, selected && styles.valueOn]} numberOfLines={1}>
+        {String(value ?? "—")}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 98,
-    padding: 12,
-    borderRadius: theme.radius.lg,
+    minHeight: 88,
+    padding: theme.space.sm,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceStrong,
+    backgroundColor: theme.colors.surface,
     justifyContent: "space-between",
-    overflow: "hidden",
-    ...theme.shadow.sm,
   },
   cardOn: {
-    borderColor: "rgba(15, 118, 110, 0.48)",
-    backgroundColor: "#f7fbfa",
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
   },
-  cardPressed: { opacity: 0.94 },
-  activeRail: {
-    position: "absolute",
-    left: 0,
-    top: 12,
-    bottom: 12,
-    width: 3,
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
-    backgroundColor: theme.colors.accent,
-  },
-  top: {
-    position: "relative",
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    minHeight: 30,
-  },
-  left: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  cardPressed: { opacity: 0.92 },
+  top: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(15, 23, 42, 0.04)",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.bg,
   },
-  iconWrapOn: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
+  iconWrapOn: { backgroundColor: theme.colors.accent },
   label: {
+    flex: 1,
     fontSize: 12,
-    lineHeight: 15,
+    fontWeight: "600",
     color: theme.colors.text,
-    fontWeight: "800",
-    flexShrink: 1,
-    minWidth: 0,
   },
   labelOn: { color: theme.colors.accentHover },
-  valueWrap: {
-    marginTop: 6,
-    minHeight: 28,
-    justifyContent: "flex-end",
-  },
-  // Explicit line metrics to avoid digit-dependent vertical jitter on some Android fonts.
   value: {
-    fontSize: 24,
-    lineHeight: 28,
+    marginTop: 8,
+    fontSize: 26,
+    fontWeight: "700",
     color: theme.colors.textBright,
-    fontWeight: "900",
     includeFontPadding: false,
   },
   valueOn: { color: theme.colors.textBright },

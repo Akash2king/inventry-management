@@ -12,6 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../AuthContext.jsx";
+import { KeyboardAwareScroll } from "../components/ui/KeyboardAwareScroll.jsx";
+import { useScrollContentStyle } from "../utils/responsive.js";
 
 const PAGE_SIZE = 50;
 const ACTIONS = [
@@ -56,6 +58,7 @@ function groupRows(rows, mode) {
 
 export function AuditLogsScreen() {
   const { api, user } = useAuth();
+  const scrollStyle = useScrollContentStyle({ gap: 12 });
   const canView = user && (user.role === "manager" || user.role === "gm" || user.role === "superadmin");
 
   const [page, setPage] = useState(1);
@@ -128,10 +131,9 @@ export function AuditLogsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
+      <KeyboardAwareScroll
+        contentContainerStyle={scrollStyle}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load("refresh")} />}
-        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.head}>
           <Text style={styles.title}>Audit Logs</Text>
@@ -274,7 +276,7 @@ export function AuditLogsScreen() {
             <Text style={styles.btnGhostText}>Next</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

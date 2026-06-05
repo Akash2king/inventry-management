@@ -35,8 +35,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: theme.colors.surfaceMuted,
   },
-  btn: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  btn: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   btnOn: { backgroundColor: theme.colors.accent },
-  text: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
+  text: { fontSize: 13, fontWeight: "600", color: theme.colors.text },
   textOn: { color: theme.colors.textInverse },
 });

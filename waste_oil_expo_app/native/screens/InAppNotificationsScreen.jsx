@@ -2,24 +2,27 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  TextInput,
+  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
 import {
-  getWorkflowNotificationPermissionStatus,
-  isExpoPushRuntimeSupported,
-  registerWorkflowPushToken,
-  requestWorkflowNotificationPermissions,
+  getPushPermissionStatus,
+  isOneSignalRuntimeSupported,
+  registerPushWithBackend,
+  requestPushPermission,
   setAppBadgeCountSafe,
-} from "../systemNotifications.js";
+} from "../oneSignalService.js";
 import { theme } from "../theme.js";
+import { useResponsive } from "../utils/responsive.js";
+import { useResponsiveType } from "../utils/typography.js";
 
 function formatTs(iso) {
   const d = new Date(iso);
@@ -29,6 +32,8 @@ function formatTs(iso) {
 
 export function InAppNotificationsScreen({ navigation }) {
   const { api, user } = useAuth();
+  const { contentMaxWidth, horizontalPad } = useResponsive();
+  const type = useResponsiveType();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,11 +43,12 @@ export function InAppNotificationsScreen({ navigation }) {
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastBody, setBroadcastBody] = useState("");
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [testPushBusy, setTestPushBusy] = useState(false);
   const canBroadcast = user?.role === "manager" || user?.role === "gm" || user?.role === "superadmin";
 
   useEffect(() => {
     void (async () => {
-      const s = await getWorkflowNotificationPermissionStatus();
+      const s = await getPushPermissionStatus();
       setPushPerm(s);
     })();
   }, []);
@@ -102,6 +108,23 @@ export function InAppNotificationsScreen({ navigation }) {
     await load("refresh");
   }
 
+  async function sendTestPush() {
+    if (!api || testPushBusy) return;
+    setTestPushBusy(true);
+    try {
+      const res = await api.notifications.sendTestPush({
+        title: "Chem-Solv test",
+        body: "Workflow push delivery test from this device.",
+      });
+      if (!res.ok) {
+        throw new Error(res.error || "Could not send test push");
+      }
+      await load("refresh");
+    } finally {
+      setTestPushBusy(false);
+    }
+  }
+
   async function sendBroadcast() {
     if (!api || !canBroadcast) return;
     const title = broadcastTitle.trim();
@@ -123,6 +146,7 @@ export function InAppNotificationsScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={styles.toolbar}>
         <TouchableOpacity
           style={[styles.chip, onlyUnread && styles.chipOn]}
@@ -156,14 +180,14 @@ export function InAppNotificationsScreen({ navigation }) {
             onChangeText={setBroadcastTitle}
             placeholder="Title"
             placeholderTextColor="#94a3b8"
-            style={styles.broadcastInput}
+            style={[styles.broadcastInput, type.input, type.inputPad]}
           />
           <TextInput
             value={broadcastBody}
             onChangeText={setBroadcastBody}
             placeholder="Message"
             placeholderTextColor="#94a3b8"
-            style={[styles.broadcastInput, styles.broadcastTextArea]}
+            style={[styles.broadcastInput, type.input, type.inputPad, styles.broadcastTextArea]}
             multiline
             numberOfLines={3}
           />
@@ -186,36 +210,46 @@ export function InAppNotificationsScreen({ navigation }) {
           data={rows}
           keyExtractor={(item) => String(item.id)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load("refresh")} />}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%", paddingHorizontal: horizontalPad },
+          ]}
           ListHeaderComponent={
-            Platform.OS === "web" ? null : !isExpoPushRuntimeSupported() ? (
+            Platform.OS === "web" ? null : !isOneSignalRuntimeSupported() ? (
               <View style={styles.pushBanner}>
                 <Text style={styles.pushTitle}>System notifications</Text>
                 <Text style={styles.pushBody}>
-                  Expo Go no longer includes the native notification module on Android (SDK 53+). Use a{" "}
-                  <Text style={{ fontWeight: "700" }}>development build</Text> ({`expo run:android`} / EAS) for tray
-                  notifications. In-app list still works here.
+                  Push notifications require a native build ({`expo run:android`} / EAS). They are not available on web.
                 </Text>
               </View>
             ) : (
               <View style={styles.pushBanner}>
                 <Text style={styles.pushTitle}>System notifications</Text>
                 <Text style={styles.pushBody}>
-                  Allow alerts so new workflow updates (records, SLA, etc.) appear in the system notification tray when
-                  the app is in the background.
+                  Allow alerts so workflow updates appear in the notification tray via OneSignal when the app is in the
+                  background.
                 </Text>
                 {pushPerm === "granted" ? (
-                  <Text style={styles.pushOk}>Enabled</Text>
+                  <>
+                    <Text style={styles.pushOk}>Enabled</Text>
+                    <TouchableOpacity
+                      style={[styles.pushBtn, styles.pushBtnSecondary, testPushBusy && styles.broadcastBtnDisabled]}
+                      onPress={() => void sendTestPush()}
+                      disabled={testPushBusy}
+                    >
+                      <Text style={styles.pushBtnText}>{testPushBusy ? "Sending…" : "Send test push"}</Text>
+                    </TouchableOpacity>
+                  </>
                 ) : pushPerm === "denied" ? (
                   <Text style={styles.pushDenied}>Turn on in OS Settings → Notifications for this app.</Text>
                 ) : (
                   <TouchableOpacity
                     style={styles.pushBtn}
                     onPress={async () => {
-                      const r = await requestWorkflowNotificationPermissions();
+                      const r = await requestPushPermission();
                       setPushPerm(r.status);
                       if (api && r.status === "granted") {
-                        await registerWorkflowPushToken(api);
+                        await registerPushWithBackend(api);
                       }
                     }}
                   >
@@ -240,12 +274,14 @@ export function InAppNotificationsScreen({ navigation }) {
           )}
         />
       )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
+  flex: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   toolbar: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   chip: {
@@ -270,7 +306,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   unreadBadgeText: { fontSize: 14, fontWeight: "800", color: "#fff" },
-  list: { padding: 16, gap: 12 },
+  list: { paddingVertical: 16, gap: 12 },
   empty: { textAlign: "center", opacity: 0.7, marginTop: 24 },
   card: {
     borderWidth: 1,
@@ -311,6 +347,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
+  },
+  pushBtnSecondary: {
+    marginTop: 8,
+    backgroundColor: "#334155",
   },
   pushBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   broadcastCard: {

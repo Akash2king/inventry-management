@@ -10,7 +10,7 @@ import { ActivityIndicator, Platform, View } from "react-native";
 import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
-import { unregisterWorkflowPushToken } from "./systemNotifications.js";
+import { clearOneSignalUser } from "./oneSignalService.js";
 
 const AuthCtx = createContext(null);
 
@@ -133,7 +133,7 @@ export function AuthProvider({ children }) {
       return;
     }
     try {
-      await unregisterWorkflowPushToken(api);
+      await clearOneSignalUser(api);
     } catch {
       /* non-fatal */
     }

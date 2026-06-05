@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -14,9 +12,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
+import { theme } from "../theme.js";
+import { Button, EmptyState, KeyboardAwareScroll, LoadingBlock, ModalHeader, ModalShell, PageHeader } from "../components/ui/index.js";
+import { useResponsiveType } from "../utils/typography.js";
+import { FLATLIST_PERF } from "../utils/listPerf.js";
+import { showSuccess, showError, showConfirm } from "../utils/feedback.js";
+import { useResponsive } from "../utils/responsive.js";
 
 export function VendorsScreen() {
   const { api, user } = useAuth();
+  const { listColumns, horizontalPad, contentMaxWidth, gridGap, formMaxWidth } = useResponsive();
+  const type = useResponsiveType();
   const canManage = useMemo(
     () => ["storeman", "gm", "superadmin"].includes(user?.role || ""),
     [user?.role],
@@ -78,7 +84,7 @@ export function VendorsScreen() {
   const saveCreate = async () => {
     if (!api) return;
     if (!name.trim()) {
-      Alert.alert("Missing name", "Vendor name is required.");
+      showError("Vendor name is required.");
       return;
     }
     setBusy(true);
@@ -87,9 +93,9 @@ export function VendorsScreen() {
     if (res.ok) {
       closeModals();
       await load();
-      Alert.alert("Saved", "Vendor added.");
+      showSuccess("Vendor added.");
     } else {
-      Alert.alert("Save failed", res.error || "Could not save vendor.");
+      showError(res.error || "Could not save vendor.");
     }
   };
 
@@ -97,7 +103,7 @@ export function VendorsScreen() {
     if (!api) return;
     if (!activeVendor?.id) return;
     if (!name.trim()) {
-      Alert.alert("Missing name", "Vendor name is required.");
+      showError("Vendor name is required.");
       return;
     }
     setBusy(true);
@@ -106,63 +112,61 @@ export function VendorsScreen() {
     if (res.ok) {
       closeModals();
       await load();
-      Alert.alert("Saved", "Vendor updated.");
+      showSuccess("Vendor updated.");
     } else {
-      Alert.alert("Update failed", res.error || "Could not update vendor.");
+      showError(res.error || "Could not update vendor.");
     }
   };
 
   const removeVendor = async (v) => {
     if (!api) return;
-    Alert.alert(
-      "Delete vendor?",
-      `Delete "${v?.name || "vendor"}"? This may fail if records reference it.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const res = await api.vendors.remove(v.id);
-            if (res.ok) {
-              await load();
-              Alert.alert("Deleted", "Vendor removed.");
-            } else {
-              Alert.alert("Delete failed", res.error || "Could not delete vendor.");
-            }
-          },
-        },
-      ],
-    );
+    showConfirm({
+      title: "Delete vendor?",
+      message: `Delete "${v?.name || "vendor"}"? This may fail if records reference it.`,
+      confirmText: "Delete",
+      destructive: true,
+      icon: "trash-outline",
+      onConfirm: async () => {
+        const res = await api.vendors.remove(v.id);
+        if (res.ok) {
+          await load();
+          showSuccess("Vendor removed.");
+        } else {
+          showError(res.error || "Could not delete vendor.");
+        }
+      },
+    });
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top","bottom"]}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Vendors</Text>
-          <Text style={styles.muted} numberOfLines={1}>
-            Maintain vendor master data for record creation.
-          </Text>
-        </View>
-        {canManage ? (
-          <TouchableOpacity style={styles.headerBtn} onPress={openCreate}>
-            <Text style={styles.headerBtnText}>Add</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <PageHeader
+        title="Vendors"
+        subtitle="Master data for record creation"
+        right={
+          canManage ? (
+            <TouchableOpacity style={styles.headerBtn} onPress={openCreate}>
+              <Text style={styles.headerBtnText}>Add</Text>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-        </View>
+        <LoadingBlock message="Loading vendors…" />
       ) : (
         <FlatList
           data={rows}
+          key={`vendors-${listColumns}`}
+          numColumns={listColumns}
+          columnWrapperStyle={listColumns > 1 ? { gap: gridGap, paddingHorizontal: horizontalPad } : undefined}
           keyExtractor={(item) => String(item.id)}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
+          }
+          {...FLATLIST_PERF}
           renderItem={({ item }) => (
-            <View style={styles.row}>
+            <View style={[styles.row, listColumns > 1 && styles.rowGrid]}>
               <TouchableOpacity style={{ flex: 1 }} onPress={() => (canManage ? openEdit(item) : null)} disabled={!canManage}>
                 <Text style={styles.rowTitle}>{item.name || "—"}</Text>
                 <Text style={styles.rowSub} numberOfLines={2}>
@@ -182,9 +186,16 @@ export function VendorsScreen() {
             </View>
           )}
           ListEmptyComponent={
-            <Text style={styles.empty}>No vendors yet. Pull to refresh.</Text>
+            <EmptyState
+              icon="business-outline"
+              title="No vendors yet"
+              message={canManage ? "Tap Add to create your first vendor." : "Pull to refresh."}
+            />
           }
-          contentContainerStyle={rows.length === 0 ? styles.emptyWrap : styles.listPad}
+          contentContainerStyle={[
+            rows.length === 0 ? styles.emptyWrap : styles.listPad,
+            { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" },
+          ]}
         />
       )}
 
@@ -197,50 +208,43 @@ export function VendorsScreen() {
       ) : null}
 
       <Modal visible={createOpen} animationType="slide" onRequestClose={closeModals}>
-        <SafeAreaView style={styles.modalSafe} edges={["bottom"]}>
-          <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Add vendor</Text>
-            <TouchableOpacity onPress={closeModals}>
-              <Text style={styles.modalClose}>Close</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <Text style={styles.label}>Name *</Text>
-            <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Vendor name" placeholderTextColor="#94a3b8" />
-            <Text style={styles.label}>Notes</Text>
-            <TextInput value={notes} onChangeText={setNotes} style={[styles.input, styles.multiline]} multiline placeholder="Optional notes" placeholderTextColor="#94a3b8" />
-            <TouchableOpacity style={[styles.primary, busy && styles.disabled]} onPress={() => void saveCreate()} disabled={busy}>
-              <Text style={styles.primaryText}>{busy ? "Saving…" : "Save vendor"}</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+        <ModalShell style={styles.modalSafe}>
+          <ModalHeader title="Add vendor" onClose={closeModals} />
+          <KeyboardAwareScroll
+            contentContainerStyle={[styles.modalBody, { maxWidth: formMaxWidth, alignSelf: "center", width: "100%", paddingHorizontal: horizontalPad }]}
+            keyboardVerticalOffset={0}
+          >
+            <Text style={[styles.label, type.label]}>Name *</Text>
+            <TextInput value={name} onChangeText={setName} style={[styles.input, type.input, type.inputPad]} placeholder="Vendor name" placeholderTextColor="#94a3b8" />
+            <Text style={[styles.label, type.label]}>Notes</Text>
+            <TextInput value={notes} onChangeText={setNotes} style={[styles.input, type.input, type.inputPad, styles.multiline]} multiline placeholder="Optional notes" placeholderTextColor="#94a3b8" />
+            <Button title="Save vendor" onPress={() => void saveCreate()} loading={busy} disabled={busy} />
+          </KeyboardAwareScroll>
+        </ModalShell>
       </Modal>
 
       <Modal visible={editOpen} animationType="slide" onRequestClose={closeModals}>
-        <SafeAreaView style={styles.modalSafe} edges={["bottom"]}>
-          <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Edit vendor</Text>
-            <TouchableOpacity onPress={closeModals}>
-              <Text style={styles.modalClose}>Close</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <Text style={styles.label}>Name *</Text>
-            <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Vendor name" placeholderTextColor="#94a3b8" />
-            <Text style={styles.label}>Notes</Text>
-            <TextInput value={notes} onChangeText={setNotes} style={[styles.input, styles.multiline]} multiline placeholder="Optional notes" placeholderTextColor="#94a3b8" />
-            <TouchableOpacity style={[styles.primary, busy && styles.disabled]} onPress={() => void saveEdit()} disabled={busy}>
-              <Text style={styles.primaryText}>{busy ? "Saving…" : "Save changes"}</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+        <ModalShell style={styles.modalSafe}>
+          <ModalHeader title="Edit vendor" onClose={closeModals} />
+          <KeyboardAwareScroll
+            contentContainerStyle={[styles.modalBody, { maxWidth: formMaxWidth, alignSelf: "center", width: "100%", paddingHorizontal: horizontalPad }]}
+            keyboardVerticalOffset={0}
+          >
+            <Text style={[styles.label, type.label]}>Name *</Text>
+            <TextInput value={name} onChangeText={setName} style={[styles.input, type.input, type.inputPad]} placeholder="Vendor name" placeholderTextColor="#94a3b8" />
+            <Text style={[styles.label, type.label]}>Notes</Text>
+            <TextInput value={notes} onChangeText={setNotes} style={[styles.input, type.input, type.inputPad, styles.multiline]} multiline placeholder="Optional notes" placeholderTextColor="#94a3b8" />
+            <Button title="Save changes" onPress={() => void saveEdit()} loading={busy} disabled={busy} />
+          </KeyboardAwareScroll>
+        </ModalShell>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f8fafc" },
+  safe: { flex: 1, backgroundColor: theme.colors.bg },
+  rowWrap: {},
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -254,28 +258,33 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: "900", color: "#0f172a" },
   muted: { color: "#64748b", fontSize: 12, lineHeight: 18 },
   headerBtn: {
-    backgroundColor: "#dcfce7",
-    paddingHorizontal: 12,
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: theme.radius.pill,
   },
-  headerBtnText: { color: "#166534", fontWeight: "900", fontSize: 12 },
+  headerBtnText: { color: theme.colors.textInverse, fontWeight: "600", fontSize: 13 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  listPad: { paddingVertical: 8 },
+  listPad: { paddingVertical: theme.space.xs },
   row: {
-    backgroundColor: "#fff",
-    marginHorizontal: 12,
-    marginVertical: 6,
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: theme.colors.surface,
+    marginHorizontal: theme.space.md,
+    marginVertical: 4,
+    padding: theme.space.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
     flexDirection: "row",
-    gap: 12,
+    gap: theme.space.sm,
     alignItems: "flex-start",
   },
-  rowTitle: { fontSize: 16, fontWeight: "900", color: "#0f172a" },
-  rowSub: { marginTop: 4, fontSize: 13, color: "#64748b", lineHeight: 18 },
+  rowGrid: {
+    marginHorizontal: 0,
+    flex: 1,
+    minWidth: 0,
+  },
+  rowTitle: { ...theme.type.h3, fontWeight: "700" },
+  rowSub: { marginTop: 4, ...theme.type.body, fontSize: 13 },
   rowActions: { gap: 8, alignItems: "flex-end" },
   smallBtn: {
     borderWidth: 1,

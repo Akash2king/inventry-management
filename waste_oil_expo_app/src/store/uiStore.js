@@ -22,6 +22,25 @@ export const useUiStore = create((set, get) => ({
       toasts: s.toasts.filter((t) => t.id !== id),
     })),
 
+  /** Branded modal dialog (replaces Alert.alert on native). */
+  dialog: null,
+  showDialog: (opts) => {
+    const id = ++_id;
+    set({
+      dialog: {
+        id,
+        title: opts.title || "",
+        message: opts.message || "",
+        icon: opts.icon || null,
+        variant: opts.variant || "default",
+        cancelable: opts.cancelable !== false,
+        buttons: Array.isArray(opts.buttons) ? opts.buttons : [{ text: "OK" }],
+      },
+    });
+    return id;
+  },
+  dismissDialog: () => set({ dialog: null }),
+
   sidebarOpen: false,
   setSidebarOpen: (isOpen) => set({ sidebarOpen: Boolean(isOpen) }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),

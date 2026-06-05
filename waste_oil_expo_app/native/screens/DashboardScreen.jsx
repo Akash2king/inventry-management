@@ -16,7 +16,11 @@ import { STAGE_LABELS } from "../../src/utils/stageLabels.js";
 import { stageForRole } from "../../src/utils/permissions.js";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../theme.js";
-import { Badge, Card, SegmentedControl, SectionHeader, StatCard } from "../components/ui/index.js";
+import { Badge, Card, LoadingBlock, SegmentedControl, SectionHeader, StatCard } from "../components/ui/index.js";
+import { FLATLIST_PERF } from "../utils/listPerf.js";
+import { showSuccess, showError } from "../utils/feedback.js";
+import { useResponsive } from "../utils/responsive.js";
+import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 import appLogo from "../../src/assets/app-logo.png";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -64,6 +68,7 @@ async function ensureDocsDir() {
 
 export function DashboardScreen({ navigation }) {
   const { api, user, refreshUser } = useAuth();
+  const { horizontalPad, contentMaxWidth, kpiColumns, listColumns, gridGap } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState("overview"); // overview | analytics
@@ -217,7 +222,7 @@ export function DashboardScreen({ navigation }) {
       });
     }
     // Always show where file was saved
-    Alert.alert("Saved", `Saved to Documents:\n${uri}`);
+    showSuccess("Export saved to Documents");
   }, []);
 
   const exportDueSoon = useCallback(async () => {
@@ -327,11 +332,13 @@ export function DashboardScreen({ navigation }) {
 
   const kpiRows = useMemo(() => {
     const rows = [];
-    for (let i = 0; i < kpiCards.length; i += 2) {
-      rows.push([kpiCards[i], kpiCards[i + 1] || null]);
+    for (let i = 0; i < kpiCards.length; i += kpiColumns) {
+      rows.push(kpiCards.slice(i, i + kpiColumns));
     }
     return rows;
-  }, [kpiCards]);
+  }, [kpiCards, kpiColumns]);
+
+  const listNumColumns = view === "overview" && listColumns > 1 ? listColumns : 1;
 
   const baseList = peer ? atMyStageOpen : active;
   const listData = useMemo(() => {
@@ -345,68 +352,56 @@ export function DashboardScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <LoadingBlock message="Loading dashboard…" fullScreen />
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top","bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <FlatList
         data={listData}
+        key={`dash-list-${listNumColumns}`}
+        numColumns={listNumColumns}
+        columnWrapperStyle={listNumColumns > 1 ? { gap: gridGap, paddingHorizontal: horizontalPad } : undefined}
         keyExtractor={(item) => String(item.id)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
+        }
+        {...FLATLIST_PERF}
         ListHeaderComponent={
-          <View>
-            <View style={styles.headerWrap}>
+          <ContentWidth noPad>
+            <View style={[styles.headerWrap, { paddingHorizontal: horizontalPad }]}>
               <Card style={styles.headerCard} padded={false}>
                 <View style={styles.headerInner}>
                   <View style={styles.heroRow}>
                     <View style={styles.brandMark}>
                       <Image source={appLogo} style={styles.brandLogo} resizeMode="cover" />
                     </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.brandName} numberOfLines={1}>
-                        Chem-Solv
-                      </Text>
-                      <Text style={styles.brandSub} numberOfLines={1}>
-                        INVENTORY
-                      </Text>
+                    <View style={styles.brandTextCol}>
+                      <Text style={styles.brandName}>Chem-Solv</Text>
+                      <Text style={styles.brandSub}>INVENTORY</Text>
                     </View>
                     <TouchableOpacity
-                      onPress={() => navigation.navigate("InAppNotifications")}
-                      style={styles.brandIconBtn}
+                      onPress={() => navigation.navigate("SettingsTab")}
+                      style={styles.brandAvatar}
                       accessibilityRole="button"
-                      accessibilityLabel="Workflow notifications"
+                      accessibilityLabel="Open Settings"
                       hitSlop={10}
                     >
-                      <Ionicons name="notifications-outline" size={18} color={theme.colors.textBright} />
-                    </TouchableOpacity>
-                    <View style={styles.userInfoWrap}>
-                      <Text style={styles.usernameText} numberOfLines={1}>
-                        {user?.username || user?.full_name || "User"}
+                      <Text style={styles.brandAvatarText}>
+                        {(user?.full_name || user?.username || "U").slice(0, 2).toUpperCase()}
                       </Text>
-                      <TouchableOpacity
-                        onPress={() => navigation.navigate("SettingsTab")}
-                        style={styles.brandAvatar}
-                        accessibilityRole="button"
-                        accessibilityLabel="Open Settings"
-                        hitSlop={10}
-                      >
-                        <Text style={styles.brandAvatarText}>
-                          {(user?.full_name || user?.username || "U").slice(0, 2).toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   <View style={styles.heroDivider} />
 
                   <View style={styles.headerTop}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.headerTopLeft}>
                       <Text style={styles.title}>Dashboard</Text>
-                      <Text style={styles.meta} numberOfLines={1}>
+                      <Text style={styles.meta} numberOfLines={2}>
                         Hello {user?.full_name || user?.username || "there"}
                       </Text>
                       <View style={styles.roleRow}>
@@ -414,6 +409,15 @@ export function DashboardScreen({ navigation }) {
                         {peer && myStage ? <Badge variant="neutral">{`S${myStage}`}</Badge> : null}
                       </View>
                     </View>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("InAppNotifications")}
+                      style={styles.notifyBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Workflow notifications"
+                      hitSlop={10}
+                    >
+                      <Ionicons name="notifications-outline" size={22} color={theme.colors.accent} />
+                    </TouchableOpacity>
                   </View>
 
                   <View style={styles.statusStrip}>
@@ -447,29 +451,25 @@ export function DashboardScreen({ navigation }) {
               </Card>
             </View>
 
-            <View style={styles.kpiGrid}>
-              {kpiRows.map(([a, b]) => (
-                <View key={a.id} style={styles.kpiRowLine}>
-                  <StatCard
-                    icon={a.icon}
-                    label={a.label}
-                    value={a.value}
-                    selected={slice === a.slice}
-                    onPress={() => setSlice(a.slice)}
-                    style={styles.kpiCard}
-                  />
-                  {b ? (
+            <View style={[styles.kpiGrid, { paddingHorizontal: horizontalPad }]}>
+              {kpiRows.map((row, rowIdx) => (
+                <View key={`kpi-row-${rowIdx}`} style={[styles.kpiRowLine, { gap: gridGap }]}>
+                  {row.map((a) => (
                     <StatCard
-                      icon={b.icon}
-                      label={b.label}
-                      value={b.value}
-                      selected={slice === b.slice}
-                      onPress={() => setSlice(b.slice)}
+                      key={a.id}
+                      icon={a.icon}
+                      label={a.label}
+                      value={a.value}
+                      selected={slice === a.slice}
+                      onPress={() => setSlice(a.slice)}
                       style={styles.kpiCard}
                     />
-                  ) : (
-                    <View style={styles.kpiCardPlaceholder} pointerEvents="none" />
-                  )}
+                  ))}
+                  {row.length < kpiColumns
+                    ? Array.from({ length: kpiColumns - row.length }).map((_, i) => (
+                        <View key={`ph-${i}`} style={styles.kpiCardPlaceholder} pointerEvents="none" />
+                      ))
+                    : null}
                 </View>
               ))}
             </View>
@@ -502,7 +502,7 @@ export function DashboardScreen({ navigation }) {
               />
 
               {view === "analytics" ? (
-                <View style={styles.analyticsCard}>
+                <View style={[styles.analyticsCard, { marginHorizontal: horizontalPad }]}>
                   <View style={styles.analyticsTitleRow}>
                     <View style={styles.analyticsTitleIcon}>
                       <Ionicons name="analytics-outline" size={16} color={theme.colors.accent} />
@@ -646,11 +646,16 @@ export function DashboardScreen({ navigation }) {
                 </View>
               ) : null}
             </View>
-          </View>
+          </ContentWidth>
         }
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.row}
+            style={[
+              styles.row,
+              listNumColumns > 1
+                ? { marginHorizontal: 0, flex: 1, minWidth: 0 }
+                : { marginHorizontal: horizontalPad },
+            ]}
             onPress={() => {
               const target = slice === "queue" ? "RecordDetail" : "RecordDetail";
               navigation.getParent()?.navigate(target, {
@@ -689,14 +694,24 @@ export function DashboardScreen({ navigation }) {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <View style={[styles.row, styles.emptyCard]} pointerEvents="none">
+          <View
+            style={[
+              styles.row,
+              styles.emptyCard,
+              { marginHorizontal: horizontalPad },
+            ]}
+            pointerEvents="none"
+          >
             <Text style={styles.emptyText}>
               {slice === "queue" ? "Nothing in your queue." : "No records in this slice."}
             </Text>
             <Text style={styles.emptySub}>Pull to refresh.</Text>
           </View>
         }
-        contentContainerStyle={styles.listPad}
+        contentContainerStyle={[
+          styles.listPad,
+          { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" },
+        ]}
       />
     </SafeAreaView>
   );
@@ -705,7 +720,7 @@ export function DashboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  headerWrap: { paddingHorizontal: theme.space.md, paddingTop: theme.space.md, paddingBottom: theme.space.xs },
+  headerWrap: { paddingTop: theme.space.md, paddingBottom: theme.space.xs },
   headerCard: { overflow: "hidden", borderRadius: theme.radius.xl },
   headerInner: { padding: theme.space.md, gap: 14 },
   heroRow: {
@@ -723,17 +738,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceMuted,
   },
-  userInfoWrap: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  usernameText: {
-    fontSize: 13,
-    color: theme.colors.textBright,
-    fontWeight: "700",
-    maxWidth: 120,
-    textAlign: "right",
+  brandTextCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
   },
   brandLogo: {
     width: "100%",
@@ -743,17 +751,18 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: theme.colors.border,
   },
-  brandName: { fontSize: 15, lineHeight: 19, fontWeight: "900", color: theme.colors.textBright },
-  brandSub: { marginTop: 1, fontSize: 10, letterSpacing: 1.1, fontWeight: "900", color: theme.colors.textMuted },
-  brandIconBtn: {
-    width: 40,
-    height: 40,
+  brandName: { fontSize: 17, lineHeight: 21, fontWeight: "700", color: theme.colors.textBright },
+  brandSub: { marginTop: 2, fontSize: 10, letterSpacing: 1.2, fontWeight: "600", color: theme.colors.textMuted },
+  notifyBtn: {
+    width: 44,
+    height: 44,
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceMuted,
+    backgroundColor: theme.colors.accentSoft,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   brandAvatar: {
     width: 40,
@@ -766,8 +775,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brandAvatarText: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
-  headerTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  title: { fontSize: 24, lineHeight: 29, fontWeight: "900", color: theme.colors.textBright },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.space.sm,
+  },
+  headerTopLeft: { flex: 1, minWidth: 0 },
+  title: { fontSize: 22, lineHeight: 28, fontWeight: "700", color: theme.colors.textBright },
   meta: { marginTop: 2, fontSize: 13, lineHeight: 18, color: theme.colors.text, fontWeight: "700" },
   roleRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
   statusStrip: {
@@ -776,7 +791,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
-    backgroundColor: "rgba(216, 237, 232, 0.42)",
+    backgroundColor: theme.colors.bgTint,
     overflow: "hidden",
   },
   statusItem: {
@@ -843,7 +858,7 @@ const styles = StyleSheet.create({
   segmentBtnOn: { backgroundColor: theme.colors.accent },
   segmentText: { fontSize: 12, fontWeight: "900", color: theme.colors.textBright },
   segmentTextOn: { color: "#fff" },
-  kpiGrid: { paddingHorizontal: theme.space.md, paddingTop: theme.space.xs, paddingBottom: theme.space.sm, gap: 10 },
+  kpiGrid: { paddingTop: theme.space.xs, paddingBottom: theme.space.sm, gap: 10 },
   kpiRowLine: { flexDirection: "row", gap: 10 },
   kpiCard: { flex: 1, minWidth: 0 },
   kpiCardPlaceholder: { flex: 1, minWidth: 0, minHeight: 96, opacity: 0 },
@@ -857,7 +872,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sectionTitle: { fontSize: 14, fontWeight: "800", color: theme.colors.textBright },
-  sectionActions: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", maxWidth: 230 },
+  sectionActions: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", maxWidth: 420 },
   linkBtn: {
     minHeight: 32,
     justifyContent: "center",
@@ -870,7 +885,6 @@ const styles = StyleSheet.create({
   },
   link: { fontSize: 11, lineHeight: 14, fontWeight: "900", color: theme.colors.accentHover },
   analyticsCard: {
-    marginHorizontal: theme.space.md,
     marginBottom: 10,
     backgroundColor: theme.colors.surfaceStrong,
     borderRadius: theme.radius.xl,
@@ -920,7 +934,6 @@ const styles = StyleSheet.create({
   listPad: { paddingBottom: 22 },
   row: {
     backgroundColor: theme.colors.surfaceStrong,
-    marginHorizontal: theme.space.md,
     marginVertical: 5,
     padding: theme.space.md,
     borderRadius: theme.radius.lg,

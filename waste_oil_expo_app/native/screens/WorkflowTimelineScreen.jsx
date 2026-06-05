@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
+  FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
-  FlatList,
-  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
+import { theme } from "../theme.js";
+import { EmptyState, FadeIn, LoadingBlock } from "../components/ui/index.js";
+import { useResponsive } from "../utils/responsive.js";
 
 function formatTs(isoTs) {
   try {
@@ -36,6 +38,7 @@ function actorLabel(t) {
 }
 
 export function WorkflowTimelineScreen({ route }) {
+  const { contentMaxWidth, horizontalPad } = useResponsive();
   const recordId = route.params?.recordId ? String(route.params.recordId) : "";
   const { api } = useAuth();
   const [rows, setRows] = useState([]);
@@ -46,7 +49,7 @@ export function WorkflowTimelineScreen({ route }) {
     if (!api || !recordId) return;
     const tr = await api.workflow.getTransitions(recordId);
     if (tr.ok && Array.isArray(tr.data)) {
-      setRows(tr.data.slice(0).reverse()); // newest first
+      setRows(tr.data.slice(0).reverse());
     } else {
       setRows([]);
     }
@@ -60,9 +63,9 @@ export function WorkflowTimelineScreen({ route }) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <LoadingBlock message="Loading timeline…" fullScreen />
+      </SafeAreaView>
     );
   }
 
@@ -78,48 +81,56 @@ export function WorkflowTimelineScreen({ route }) {
               setRefreshing(true);
               void load();
             }}
+            tintColor={theme.colors.accent}
           />
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.title}>
-              {actionLabel(item)} · Stage {item.from_stage}→{item.to_stage}
-            </Text>
-            <Text style={styles.meta}>
-              {actorLabel(item)} · {formatTs(item.timestamp)}
-            </Text>
-            {item.note ? <Text style={styles.note}>{String(item.note)}</Text> : null}
-            <Text style={styles.dept} numberOfLines={2}>
-              {(item.from_department_name || "—") + " → " + (item.to_department_name || "—")}
-            </Text>
-          </View>
+        renderItem={({ item, index }) => (
+          <FadeIn delay={Math.min(index * 48, 240)} style={styles.cardWrap}>
+            <View style={styles.card}>
+              <Text style={styles.title}>
+                {actionLabel(item)} · Stage {item.from_stage}→{item.to_stage}
+              </Text>
+              <Text style={styles.meta}>
+                {actorLabel(item)} · {formatTs(item.timestamp)}
+              </Text>
+              {item.note ? <Text style={styles.note}>{String(item.note)}</Text> : null}
+              <Text style={styles.dept} numberOfLines={2}>
+                {(item.from_department_name || "—") + " → " + (item.to_department_name || "—")}
+              </Text>
+            </View>
+          </FadeIn>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>No transitions yet.</Text>}
-        contentContainerStyle={rows.length === 0 ? styles.emptyWrap : styles.listPad}
+        ListEmptyComponent={
+          <EmptyState
+            icon="git-branch-outline"
+            title="No workflow history"
+            message="Transitions will appear here after the record moves through the pipeline."
+          />
+        }
+        contentContainerStyle={[
+          rows.length === 0 ? styles.emptyWrap : styles.listPad,
+          { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%", paddingHorizontal: horizontalPad },
+        ]}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f8fafc" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  listPad: { paddingVertical: 10 },
+  safe: { flex: 1, backgroundColor: theme.colors.bg },
+  listPad: { paddingVertical: theme.space.lg, gap: theme.space.sm },
+  emptyWrap: { flexGrow: 1, justifyContent: "center" },
+  cardWrap: {},
   card: {
-    backgroundColor: "#fff",
-    marginHorizontal: 12,
-    marginVertical: 6,
-    borderRadius: 12,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 14,
-    gap: 6,
+    borderColor: theme.colors.border,
+    padding: theme.space.lg,
+    ...theme.shadow.sm,
   },
-  title: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
-  meta: { fontSize: 12, color: "#64748b" },
-  note: { fontSize: 12, color: "#334155", lineHeight: 16 },
-  dept: { fontSize: 12, color: "#0f172a", opacity: 0.75 },
-  emptyWrap: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  empty: { textAlign: "center", color: "#64748b", fontSize: 14 },
+  title: { fontSize: 15, fontWeight: "800", color: theme.colors.textBright },
+  meta: { marginTop: 6, fontSize: 12, fontWeight: "600", color: theme.colors.textMuted },
+  note: { marginTop: 8, fontSize: 13, color: theme.colors.text },
+  dept: { marginTop: 8, fontSize: 12, color: theme.colors.textMuted },
 });
-

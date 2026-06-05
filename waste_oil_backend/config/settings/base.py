@@ -231,10 +231,14 @@ EMAIL_NOTIFICATIONS_ENABLED = (
     in ("1", "true", "yes")
 )
 
-# Mobile workflow pushes — Expo Push API (https://docs.expo.dev/push-notifications/sending-notifications/).
-# Optional: EXPO_ACCESS_TOKEN from https://expo.dev/accounts/<account>/settings/access-tokens
-EXPO_PUSH_ENABLED = os.environ.get("EXPO_PUSH_ENABLED", "true").lower() in ("1", "true", "yes")
-EXPO_ACCESS_TOKEN = os.environ.get("EXPO_ACCESS_TOKEN", "").strip()
+# Mobile workflow pushes — OneSignal REST API (https://documentation.onesignal.com/reference/create-notification)
+ONESIGNAL_APP_ID = os.environ.get("ONESIGNAL_APP_ID", "").strip()
+ONESIGNAL_REST_API_KEY = os.environ.get("ONESIGNAL_REST_API_KEY", "").strip()
+ONESIGNAL_PUSH_ENABLED = os.environ.get("ONESIGNAL_PUSH_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 try:
     import config.celery  # noqa: F401 — register Celery app and task modules
