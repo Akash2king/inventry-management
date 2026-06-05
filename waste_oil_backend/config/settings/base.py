@@ -75,13 +75,19 @@ TEMPLATES = [
     },
 ]
 
+# Database: set DATABASE_URL in waste_oil_backend/.env (loaded above via load_dotenv).
+# PostgreSQL example (Aiven): postgres://user:pass@host:port/defaultdb?sslmode=require
+# Omit DATABASE_URL for local SQLite (db.sqlite3 in project root).
+_database_url = os.environ.get("DATABASE_URL", "").strip()
+_sqlite_default = "sqlite:///" + str(BASE_DIR / "db.sqlite3")
+_use_postgres = _database_url.startswith(("postgres://", "postgresql://"))
+
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.environ.get(
-            "DATABASE_URL",
-            "sqlite:///" + str(BASE_DIR / "db.sqlite3"),
-        ),
+        default=_database_url or _sqlite_default,
         conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=_use_postgres,
     )
 }
 
