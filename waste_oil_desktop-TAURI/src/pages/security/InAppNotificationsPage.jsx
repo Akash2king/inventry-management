@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 import * as notifApi from "@/api/inAppNotifications.js";
 import {
@@ -7,6 +7,7 @@ import {
   isSystemNotificationSupported,
   requestSystemNotificationPermission,
 } from "@/utils/systemNotifications.js";
+import { navigateFromNotificationMetadata } from "@/utils/notificationNavigation.js";
 
 function formatTs(iso) {
   const d = new Date(iso);
@@ -21,6 +22,7 @@ function bumpHeaderUnreadBadge() {
 }
 
 export function InAppNotificationsPage() {
+  const navigate = useNavigate();
   const token = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const [rows, setRows] = useState([]);
@@ -32,6 +34,7 @@ export function InAppNotificationsPage() {
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastBody, setBroadcastBody] = useState("");
   const [broadcastBusy, setBroadcastBusy] = useState(false);
+  const [testPushBusy, setTestPushBusy] = useState(false);
   const canBroadcast = user?.role === "manager" || user?.role === "gm" || user?.role === "superadmin";
 
   useEffect(() => {
@@ -108,6 +111,37 @@ export function InAppNotificationsPage() {
     }
   }
 
+  async function onSendTestPush() {
+    if (!token || testPushBusy) return;
+    setTestPushBusy(true);
+    setError("");
+    try {
+      await notifApi.sendTestPush(
+        {
+          title: "Chem-Solv test",
+          body: "Workflow notification delivery test from this desktop.",
+        },
+        token,
+      );
+      await load();
+      bumpHeaderUnreadBadge();
+    } catch (e) {
+      setError(e?.message || "Could not send test notification");
+    } finally {
+      setTestPushBusy(false);
+    }
+  }
+
+  function openNotification(n) {
+    navigateFromNotificationMetadata(navigate, n.metadata);
+    if (!n.read_at && token) {
+      void notifApi.markRead(n.id, token).then(() => {
+        bumpHeaderUnreadBadge();
+        void load();
+      });
+    }
+  }
+
   return (
     <div>
       <div className="page-records__head">
@@ -172,9 +206,19 @@ export function InAppNotificationsPage() {
               appear in the Windows / macOS notification tray (same copy as listed here).
             </div>
             {pushStatus === "granted" ? (
-              <span className="badge-completed" style={{ textTransform: "none" }}>
-                Enabled
-              </span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+                <span className="badge-completed" style={{ textTransform: "none" }}>
+                  Enabled
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={testPushBusy}
+                  onClick={() => void onSendTestPush()}
+                >
+                  {testPushBusy ? "Sending…" : "Send test notification"}
+                </button>
+              </div>
             ) : pushStatus === "denied" ? (
               <span style={{ fontSize: "0.85rem", opacity: 0.85 }}>Blocked in browser settings — enable notifications for this app.</span>
             ) : (
@@ -290,7 +334,14 @@ export function InAppNotificationsPage() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ fontWeight: 700 }}>{n.title}</div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: 0, fontWeight: 700, fontSize: "inherit", minHeight: 0 }}
+                      onClick={() => openNotification(n)}
+                    >
+                      {n.title}
+                    </button>
                     {n.body ? (
                       <div style={{ marginTop: "0.35rem", opacity: 0.9, fontSize: "0.92rem" }}>{n.body}</div>
                     ) : null}

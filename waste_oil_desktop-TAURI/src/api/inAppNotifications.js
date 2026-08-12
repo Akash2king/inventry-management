@@ -19,3 +19,7 @@ export function markRead(id, token) {
 export function markAllRead(token) {
   return unwrap(window.api.notifications.markAllRead(token));
 }
+
+export function sendTestPush(data, token) {
+  return unwrap(window.api.notifications.sendTestPush(data || {}, token));
+}

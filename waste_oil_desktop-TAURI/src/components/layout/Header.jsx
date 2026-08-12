@@ -45,6 +45,7 @@ export function Header() {
       ) {
         let title = "Chem-Solv Inventory";
         let body = n === 1 ? "New workflow notification." : `${n} unread workflow notifications.`;
+        let metadata = null;
         if (window.api.notifications.list) {
           const listRes = await window.api.notifications.list(
             { unread: true, page_size: 1, page: 1 },
@@ -54,9 +55,10 @@ export function Header() {
             const row = listRes.data.results[0];
             title = row.title || title;
             body = row.body || body;
+            metadata = row.metadata || null;
           }
         }
-        if (maybeShowWorkflowSystemNotification({ title, body })) {
+        if (maybeShowWorkflowSystemNotification({ title, body, metadata })) {
           lastPushAtRef.current = now;
         }
       }

@@ -53,7 +53,7 @@ export function LoginScreen({ navigation }) {
         <FadeIn>
         <Card style={styles.card} variant="strong">
           <Text style={[styles.brand, type.title]}>Chem-Solv Inventory</Text>
-          <Text style={[styles.sub, type.body]}>Native • same network as backend</Text>
+          <Text style={[styles.sub, type.body]}>Secure sign-in for your team</Text>
           {!apiBase ? (
             <View style={styles.banner}>
               <Text style={styles.bannerText}>Set backend URL before signing in.</Text>
@@ -81,6 +81,8 @@ export function LoginScreen({ navigation }) {
             onChangeText={setPassword}
             secureTextEntry
             editable={Boolean(api)}
+            returnKeyType="go"
+            onSubmitEditing={() => void handleLogin()}
             style={[styles.input, type.input, type.inputPad]}
           />
           <Button

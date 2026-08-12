@@ -130,7 +130,7 @@ export function SettingsScreen({ navigation }) {
 
             <ActionRow
               icon="phone-portrait-outline"
-              label="Devices"
+              label="Devices & sessions"
               type={type}
               onPress={() => navigation.navigate("Sessions")}
             />

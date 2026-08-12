@@ -4,9 +4,10 @@
  */
 export const theme = {
   colors: {
-    bg: "#F4F6F8",
+    bg: "#FAFAFA",
     bgElevated: "#FFFFFF",
     bgTint: "#E8F4F1",
+    profileRing: "#0D9488",
 
     surface: "#FFFFFF",
     surfaceMuted: "#F8FAFB",

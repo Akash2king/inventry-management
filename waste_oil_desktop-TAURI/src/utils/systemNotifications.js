@@ -42,7 +42,7 @@ export function maybeShowSecuritySystemNotification(payload) {
   return maybeShowWorkflowSystemNotification(payload);
 }
 
-export function maybeShowWorkflowSystemNotification({ title, body }) {
+export function maybeShowWorkflowSystemNotification({ title, body, metadata }) {
   if (!isSystemNotificationSupported()) {
     return false;
   }
@@ -64,6 +64,9 @@ export function maybeShowWorkflowSystemNotification({ title, body }) {
         window.focus();
       } catch {
         /* ignore */
+      }
+      if (metadata && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("wom:notification-click", { detail: metadata }));
       }
       n.close();
     };

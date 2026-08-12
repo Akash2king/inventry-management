@@ -41,7 +41,7 @@ export function Sidebar() {
               Vendors
             </NavLink>
           ) : null}
-          {!mustChange && (user?.role === "manager" || user?.role === "gm") ? (
+          {!mustChange && (user?.role === "manager" || user?.role === "gm" || user?.role === "superadmin") ? (
             <NavLink to="/audit-logs" className={navClass} onClick={closeMenu}>
               Audit Logs
             </NavLink>
@@ -61,6 +61,9 @@ export function Sidebar() {
           </NavLink>
           <NavLink to="/notifications" className={navClass} onClick={closeMenu}>
             Workflow notifications
+          </NavLink>
+          <NavLink to="/settings" className={navClass} onClick={closeMenu}>
+            Settings
           </NavLink>
         </nav>
         <div className="sidebar-footer">

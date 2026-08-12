@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
 import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
+import { loadSavedApiBase } from "@/platform/apiConfig.js";
 import "./login.css";
 
 function IconUser() {
@@ -57,6 +58,8 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const apiBase = loadSavedApiBase();
+  const hasApi = Boolean(typeof window !== "undefined" && window.api);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -85,6 +88,10 @@ export function Login() {
     setError("");
     const u = username.trim();
     const p = password;
+    if (!window.api) {
+      setError("Set API base URL first. Open Connection settings.");
+      return;
+    }
     if (!u) {
       setError("Please enter your username.");
       return;
@@ -130,16 +137,19 @@ export function Login() {
         <div className="login-page__shell">
           <div className="login-card">
             <h2 className="login-card__title" style={{ textAlign: "center" }}>
-              API setup required
+              Set backend URL first
             </h2>
             <p className="login-card__subtitle" style={{ textAlign: "center" }}>
-              The API bridge is not available.
+              Configure the Django API before signing in.
             </p>
             <p style={{ fontSize: "0.9rem", opacity: 0.9, marginTop: "1rem", lineHeight: 1.5 }}>
-              Set <code>VITE_API_BASE_URL</code> in <code>.env</code> to your backend URL, for example
-              <code>http://192.168.1.46:8000/api/v1</code> (see <code>.env.example</code>) so the
-              browser/Tauri API shim can load, then run <code>npm run dev</code>.
+              Open Settings and enter your API base URL, for example{" "}
+              <code>http://192.168.1.46:8000/api/v1</code>. You can also set{" "}
+              <code>VITE_API_BASE_URL</code> in <code>.env</code> as a default.
             </p>
+            <Link to="/settings" className="login-submit" style={{ display: "block", textAlign: "center", marginTop: "1.25rem", textDecoration: "none" }}>
+              Open Settings
+            </Link>
           </div>
         </div>
       </div>
@@ -157,6 +167,26 @@ export function Login() {
             </div>
             <h1 className="login-card__title">Welcome back</h1>
             <p className="login-card__subtitle">Sign in to Chem-Solv Inventory</p>
+            {!apiBase ? (
+              <div className="login-error" role="status" style={{ marginTop: "0.75rem", background: "rgba(234, 179, 8, 0.12)", color: "#92400e" }}>
+                Set backend URL before signing in.{" "}
+                <Link to="/settings" style={{ fontWeight: 700 }}>
+                  Open Settings
+                </Link>
+              </div>
+            ) : (
+              <p
+                style={{
+                  marginTop: "0.65rem",
+                  fontSize: "0.78rem",
+                  opacity: 0.7,
+                  wordBreak: "break-all",
+                  textAlign: "center",
+                }}
+              >
+                {apiBase}
+              </p>
+            )}
           </div>
 
           <form onSubmit={onSubmit}>
@@ -172,6 +202,7 @@ export function Login() {
                   onChange={(e) => setUsername(e.target.value)}
                   onInput={(e) => setUsername(e.currentTarget.value)}
                   placeholder="Your username"
+                  disabled={!hasApi}
                 />
               </div>
             </div>
@@ -188,6 +219,7 @@ export function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   onInput={(e) => setPassword(e.currentTarget.value)}
                   placeholder="••••••••"
+                  disabled={!hasApi}
                 />
               </div>
             </div>
@@ -197,10 +229,15 @@ export function Login() {
                 <span>{error}</span>
               </div>
             ) : null}
-            <button type="submit" className="login-submit" disabled={busy}>
+            <button type="submit" className="login-submit" disabled={busy || !hasApi}>
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
+          <p style={{ marginTop: "0.85rem", textAlign: "center", fontSize: "0.85rem" }}>
+            <Link to="/settings" style={{ fontWeight: 600 }}>
+              Connection settings
+            </Link>
+          </p>
         </div>
         <p className="login-page__foot">Secure workspace access · Storeman and workflow tools</p>
       </div>

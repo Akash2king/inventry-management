@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/authStore.js";
 import { AuthGuard } from "@/components/layout/AuthGuard.jsx";
 import { Layout } from "@/components/layout/Layout.jsx";
 import { PageLoading } from "@/components/layout/PageLoading.jsx";
+import { navigateFromNotificationMetadata } from "@/utils/notificationNavigation.js";
 
 /** Named-export pages → lazy (smaller cold start for packaged EXE). */
 const Login = lazy(() => import("@/pages/Login.jsx").then((m) => ({ default: m.Login })));
@@ -45,6 +46,9 @@ const InAppNotificationsPage = lazy(() =>
     default: m.InAppNotificationsPage,
   })),
 );
+const SettingsPage = lazy(() =>
+  import("@/pages/SettingsPage.jsx").then((m) => ({ default: m.SettingsPage })),
+);
 
 function SuspensePage({ children }) {
   return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
@@ -60,7 +64,7 @@ function GmOnly({ children }) {
 
 function ManagerOrGmOnly({ children }) {
   const role = useAuthStore((s) => s.user?.role);
-  if (role !== "manager" && role !== "gm") {
+  if (role !== "manager" && role !== "gm" && role !== "superadmin") {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -117,6 +121,14 @@ function RootShell() {
     return () => window.removeEventListener("wom:password-change-required", onForceChange);
   }, [navigate]);
 
+  useEffect(() => {
+    const onNotifClick = (event) => {
+      navigateFromNotificationMetadata(navigate, event.detail);
+    };
+    window.addEventListener("wom:notification-click", onNotifClick);
+    return () => window.removeEventListener("wom:notification-click", onNotifClick);
+  }, [navigate]);
+
   return <Outlet />;
 }
 
@@ -130,6 +142,14 @@ export const router = createHashRouter([
         element: (
           <SuspensePage>
             <Login />
+          </SuspensePage>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <SuspensePage>
+            <SettingsPage />
           </SuspensePage>
         ),
       },

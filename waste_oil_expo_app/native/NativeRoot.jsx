@@ -174,7 +174,7 @@ function AppStack() {
               <Stack.Screen
                 name="Sessions"
                 component={SessionsScreen}
-                options={{ title: "Devices" }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="InAppNotifications"
@@ -203,7 +203,7 @@ function AppStack() {
               <Stack.Screen
                 name="Sessions"
                 component={SessionsScreen}
-                options={{ title: "Devices" }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="InAppNotifications"

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { humanizeApiErrorBody } from "../src/utils/apiErrors.js";
+import { emitSessionExpired, emitTokensRefreshed } from "./utils/sessionEvents.js";
 
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
@@ -84,8 +85,11 @@ export function createNativeApi(rawBaseUrl) {
     }
   }
 
-  async function clearTokens() {
+  async function clearTokens(reason = "logout") {
     await AsyncStorage.multiRemove([LS_ACCESS, LS_REFRESH, LS_USER, LS_SESSION]);
+    if (reason === "unauthorized") {
+      emitSessionExpired({ reason });
+    }
   }
 
   async function tryRefreshAccess() {
@@ -120,6 +124,7 @@ export function createNativeApi(rawBaseUrl) {
     if (data.refresh_token) {
       await AsyncStorage.setItem(LS_REFRESH, data.refresh_token);
     }
+    emitTokensRefreshed();
     return true;
   }
 
@@ -200,7 +205,7 @@ export function createNativeApi(rawBaseUrl) {
         }
       }
       if (!skipAuth && authToken) {
-        await clearTokens();
+        await clearTokens("unauthorized");
       }
       return {
         ok: false,
@@ -255,7 +260,7 @@ export function createNativeApi(rawBaseUrl) {
 
     if (res.status === 401) {
       if (!skipAuth && authToken) {
-        await clearTokens();
+        await clearTokens("unauthorized");
       }
       return { ok: false, status: res.status, error: "Unauthorized" };
     }
@@ -345,6 +350,25 @@ export function createNativeApi(rawBaseUrl) {
       },
       revokeSession: async (id, tokenArg) =>
         request("DELETE", `auth/sessions/${id}/`, { token: tokenArg }),
+      revokeAllOtherSessions: async (tokenArg) => {
+        const listRes = await request("GET", "auth/sessions/?active=1", { token: tokenArg });
+        if (!listRes.ok) {
+          return listRes;
+        }
+        const sessions = Array.isArray(listRes.data?.results) ? listRes.data.results : [];
+        const others = sessions.filter((s) => !s.is_current);
+        if (!others.length) {
+          return { ok: true, status: 200, data: { revoked: 0, failed: 0 } };
+        }
+        let revoked = 0;
+        let failed = 0;
+        for (const session of others) {
+          const res = await request("DELETE", `auth/sessions/${session.id}/`, { token: tokenArg });
+          if (res.ok) revoked += 1;
+          else failed += 1;
+        }
+        return { ok: failed === 0, status: failed ? 207 : 200, data: { revoked, failed } };
+      },
     },
     vendors: {
       list: async (tokenArg) =>

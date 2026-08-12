@@ -3,6 +3,7 @@
  * we install a fetch-based shim whenever a native bridge is not present.
  */
 import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
+import { resolveApiBaseUrl } from "@/platform/apiConfig.js";
 
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
@@ -570,6 +571,8 @@ function createBrowserApi(baseUrl) {
         request("POST", `notifications/${id}/read/`, { token: tokenArg }),
       markAllRead: async (tokenArg) =>
         request("POST", "notifications/mark-all-read/", { token: tokenArg }),
+      sendTestPush: async (data, tokenArg) =>
+        request("POST", "notifications/send-test/", { json: data || {}, token: tokenArg }),
     },
     onAuthExpired: (callback) => {
       const fn = () => callback();
@@ -579,9 +582,21 @@ function createBrowserApi(baseUrl) {
   };
 }
 
-if (typeof window !== "undefined" && !window.api) {
-  const raw = import.meta.env.VITE_API_BASE_URL;
-  if (raw) {
-    window.api = createBrowserApi(String(raw));
+/** (Re)install the fetch-based API shim. Returns null when no base URL is configured. */
+export function initBrowserApi(baseUrl) {
+  const base = String(baseUrl || "").trim().replace(/\/+$/, "");
+  if (!base) {
+    window.api = null;
+    return null;
   }
+  window.api = createBrowserApi(base);
+  return window.api;
+}
+
+export function getConfiguredApiBaseUrl() {
+  return resolveApiBaseUrl();
+}
+
+if (typeof window !== "undefined" && !window.api) {
+  initBrowserApi(resolveApiBaseUrl());
 }

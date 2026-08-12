@@ -46,7 +46,7 @@ export function AuditLogPage() {
   const [groupBy, setGroupBy] = useState("day");
 
   useEffect(() => {
-    if (!user || !["manager", "gm"].includes(user.role)) return;
+    if (!user || !["manager", "gm", "superadmin"].includes(user.role)) return;
     setLoading(true);
     setError("");
     auditApi
@@ -73,7 +73,7 @@ export function AuditLogPage() {
   const groups = useMemo(() => groupLogs(rows, groupBy), [rows, groupBy]);
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  if (!user || !["manager", "gm"].includes(user.role)) {
+  if (!user || !["manager", "gm", "superadmin"].includes(user.role)) {
     return (
       <div className="card">
         <h3 className="card__subtitle">Audit Logs</h3>

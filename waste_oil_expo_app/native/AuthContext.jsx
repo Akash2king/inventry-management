@@ -4,15 +4,28 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, AppState, Platform, StyleSheet, Text, View } from "react-native";
 import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
 import { clearOneSignalUser } from "./oneSignalService.js";
+import { onSessionExpired } from "./utils/sessionEvents.js";
+import { navigationRef } from "./navigationRef.js";
+import { theme } from "./theme.js";
+import { showError } from "./utils/feedback.js";
 
 const AuthCtx = createContext(null);
+
+function resetToLogin() {
+  if (!navigationRef.isReady()) return;
+  navigationRef.reset({
+    index: 0,
+    routes: [{ name: "Login" }],
+  });
+}
 
 export function AuthProvider({ children }) {
   const [apiBase, setApiBase] = useState("");
@@ -20,6 +33,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [hydrating, setHydrating] = useState(true);
   const [error, setError] = useState("");
+  const userRef = useRef(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +83,41 @@ export function AuthProvider({ children }) {
       cancelled = true;
     };
   }, [api]);
+
+  const clearLocalSession = useCallback(() => {
+    setUser(null);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!api) return null;
+    const me = await api.auth.me();
+    if (me.ok && me.data) {
+      await api.persistCachedUser(me.data);
+      setUser(me.data);
+      return me.data;
+    }
+    if (me.status === 401) {
+      setUser(null);
+    }
+    return null;
+  }, [api]);
+
+  useEffect(() => {
+    return onSessionExpired(() => {
+      if (!userRef.current) return;
+      setUser(null);
+      showError("Your session ended. Please sign in again.");
+      resetToLogin();
+    });
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active" || !api || !userRef.current) return;
+      void refreshUser();
+    });
+    return () => sub.remove();
+  }, [api, refreshUser]);
 
   const applyApiBase = useCallback(async (nextBase) => {
     const b = String(nextBase || "")
@@ -141,18 +194,6 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, [api]);
 
-  const refreshUser = useCallback(async () => {
-    if (!api) return null;
-    const me = await api.auth.me();
-    if (me.ok && me.data) {
-      await api.persistCachedUser(me.data);
-      setUser(me.data);
-      return me.data;
-    }
-    setUser(null);
-    return null;
-  }, [api]);
-
   const value = useMemo(
     () => ({
       api,
@@ -165,6 +206,7 @@ export function AuthProvider({ children }) {
       logout,
       applyApiBase,
       refreshUser,
+      clearLocalSession,
     }),
     [
       api,
@@ -176,6 +218,7 @@ export function AuthProvider({ children }) {
       logout,
       applyApiBase,
       refreshUser,
+      clearLocalSession,
     ],
   );
 
@@ -194,10 +237,41 @@ export function AuthGate({ children }) {
   const { hydrating } = useAuth();
   if (hydrating) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+      <View style={gateStyles.wrap}>
+        <View style={gateStyles.card}>
+          <Text style={gateStyles.brand}>Chem-Solv Inventory</Text>
+          <Text style={gateStyles.sub}>Restoring your session…</Text>
+          <ActivityIndicator size="large" color={theme.colors.accent} style={gateStyles.spinner} />
+        </View>
       </View>
     );
   }
   return children;
 }
+
+const gateStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.bg,
+    padding: theme.space.xl,
+  },
+  card: {
+    alignItems: "center",
+    gap: theme.space.xs,
+    maxWidth: 320,
+  },
+  brand: {
+    ...theme.type.title,
+    textAlign: "center",
+  },
+  sub: {
+    ...theme.type.body,
+    textAlign: "center",
+    marginBottom: theme.space.md,
+  },
+  spinner: {
+    marginTop: theme.space.sm,
+  },
+});

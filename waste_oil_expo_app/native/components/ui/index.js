@@ -23,3 +23,7 @@ export { ContentWidth } from "./ContentWidth.jsx";
 export { KeyboardAwareScroll } from "./KeyboardAwareScroll.jsx";
 export { ModalShell } from "./ModalShell.jsx";
 export { ModalHeader } from "./ModalHeader.jsx";
+export { ProfileAvatar } from "./ProfileAvatar.jsx";
+export { SettingsGroup, SettingsRow } from "./SettingsGroup.jsx";
+export { TextField } from "./TextField.jsx";
+export { ScreenHeader } from "./ScreenHeader.jsx";
