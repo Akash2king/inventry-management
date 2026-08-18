@@ -3,11 +3,15 @@ name: Build Expo Android APK (Release)
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+      - master
+      - "fix/expo-android-ux-bugs"
     paths:
       - "waste_oil_expo_app/**"
       - ".github/workflows/build-expo-android-apk-release.yml"
+  release:
+    types: [published]
 
 concurrency:
   group: build-expo-android-apk-release-${{ github.ref }}
@@ -15,6 +19,8 @@ concurrency:
 
 jobs:
   build-apk:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -177,11 +183,18 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Chem-Solv Inventory-${{ github.ref_name }}-apk
+          name: Chem-Solv-Inventory-${{ github.ref_name }}-apk
           path: waste_oil_expo_app/${{ env.APK_PATH }}
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' || github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: expo-apk-${{ github.ref_name }}-${{ github.run_number }}
+          name: "Chem-Solv Android APK — ${{ github.ref_name }} #${{ github.run_number }}"
+          body: |
+            Automated Android APK build from commit [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) on branch `${{ github.ref_name }}`.
+
+            Download the **APK** from the assets below.
           files: waste_oil_expo_app/${{ env.APK_PATH }}
+          generate_release_notes: true
