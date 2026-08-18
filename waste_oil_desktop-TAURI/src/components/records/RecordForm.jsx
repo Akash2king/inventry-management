@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,6 +31,7 @@ export function RecordForm({
   onCreateOption,
   onDeleteOption,
   optionManageEnabled = false,
+  onDirtyChange,
 }) {
   const [photoAck, setPhotoAck] = useState("");
 
@@ -39,7 +40,7 @@ export function RecordForm({
     control,
     handleSubmit,
     setValue,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: defaultValues || {
@@ -57,6 +58,10 @@ export function RecordForm({
       remarks: "",
     },
   });
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid-form">

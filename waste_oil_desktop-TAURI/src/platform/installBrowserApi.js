@@ -47,42 +47,51 @@ function formatError(data) {
 function createBrowserApi(baseUrl) {
   const base = baseUrl.replace(/\/+$/, "");
 
+  /** Singleton refresh promise so concurrent 401s share one refresh instead of racing. */
+  let _refreshPromise = null;
+
   async function tryRefreshAccess() {
-    const refresh = localStorage.getItem(LS_REFRESH);
-    if (!refresh) {
-      return false;
-    }
-    const url = `${base}/auth/refresh/`;
-    let res;
-    try {
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refresh }),
-      });
-    } catch {
-      return false;
-    }
-    const text = await res.text();
-    let data = null;
-    if (text) {
+    if (_refreshPromise) return _refreshPromise;
+    _refreshPromise = (async () => {
       try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
+        const refresh = localStorage.getItem(LS_REFRESH);
+        if (!refresh) return false;
+        const url = `${base}/auth/refresh/`;
+        let res;
+        try {
+          res = await fetchWithTimeout(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: refresh }),
+          });
+        } catch {
+          return false;
+        }
+        const text = await res.text();
+        let data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = null;
+          }
+        }
+        if (!res.ok || !data?.access_token) {
+          return false;
+        }
+        localStorage.setItem(LS_ACCESS, data.access_token);
+        if (data.refresh_token) {
+          localStorage.setItem(LS_REFRESH, data.refresh_token);
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("wom:tokens-refreshed"));
+        }
+        return true;
+      } finally {
+        _refreshPromise = null;
       }
-    }
-    if (!res.ok || !data?.access_token) {
-      return false;
-    }
-    localStorage.setItem(LS_ACCESS, data.access_token);
-    if (data.refresh_token) {
-      localStorage.setItem(LS_REFRESH, data.refresh_token);
-    }
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("wom:tokens-refreshed"));
-    }
-    return true;
+    })();
+    return _refreshPromise;
   }
 
   async function request(method, path, options = {}) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/store/authStore.js";
 import * as auditApi from "@/api/audit.js";
+import { useDebouncedValue } from "@/utils/useDebouncedValue.js";
 
 const PAGE_SIZE = 50;
 
@@ -45,6 +46,8 @@ export function AuditLogPage() {
   const [dateTo, setDateTo] = useState("");
   const [groupBy, setGroupBy] = useState("day");
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   useEffect(() => {
     if (!user || !["manager", "gm", "superadmin"].includes(user.role)) return;
     setLoading(true);
@@ -55,7 +58,7 @@ export function AuditLogPage() {
           page,
           page_size: PAGE_SIZE,
           action: action || undefined,
-          search: search || undefined,
+          search: debouncedSearch || undefined,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
         },
@@ -68,7 +71,7 @@ export function AuditLogPage() {
       })
       .catch((e) => setError(e?.message || "Could not load audit logs"))
       .finally(() => setLoading(false));
-  }, [user, token, page, action, search, dateFrom, dateTo]);
+  }, [user, token, page, action, debouncedSearch, dateFrom, dateTo]);
 
   const groups = useMemo(() => groupLogs(rows, groupBy), [rows, groupBy]);
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));

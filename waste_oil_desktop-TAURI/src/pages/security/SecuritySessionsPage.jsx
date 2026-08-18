@@ -60,7 +60,9 @@ export function SecuritySessionsPage() {
         </div>
 
         {loading && !rows.length ? (
-          <div style={{ opacity: 0.75 }}>Loading…</div>
+          <div className="fullscreen-center" style={{ minHeight: 120 }}>
+            <div className="spinner" />
+          </div>
         ) : rows.length === 0 ? (
           <div style={{ opacity: 0.75 }}>No active sessions.</div>
         ) : (

@@ -14,6 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../AuthContext.jsx";
 import { KeyboardAwareScroll } from "../components/ui/KeyboardAwareScroll.jsx";
 import { useScrollContentStyle } from "../utils/responsive.js";
+import { theme } from "../theme.js";
 
 const PAGE_SIZE = 50;
 const ACTIONS = [
@@ -189,9 +190,9 @@ export function AuditLogsScreen() {
           </View>
 
           <Text style={styles.label}>Date from (YYYY-MM-DD)</Text>
-          <TextInput value={dateFrom} onChangeText={(t) => (setDateFrom(t), setPage(1))} style={styles.input} placeholder="2026-01-01" placeholderTextColor="#94a3b8" />
+          <TextInput value={dateFrom} onChangeText={(t) => (setDateFrom(t), setPage(1))} style={styles.input} placeholder="2026-01-01" placeholderTextColor={theme.colors.textMuted} />
           <Text style={styles.label}>Date to (YYYY-MM-DD)</Text>
-          <TextInput value={dateTo} onChangeText={(t) => (setDateTo(t), setPage(1))} style={styles.input} placeholder="2026-01-31" placeholderTextColor="#94a3b8" />
+          <TextInput value={dateTo} onChangeText={(t) => (setDateTo(t), setPage(1))} style={styles.input} placeholder="2026-01-31" placeholderTextColor={theme.colors.textMuted} />
 
           <Text style={styles.label}>Search</Text>
           <TextInput
@@ -199,7 +200,7 @@ export function AuditLogsScreen() {
             onChangeText={(t) => (setSearch(t), setPage(1))}
             style={styles.input}
             placeholder="Action, description, user, record number…"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={theme.colors.textMuted}
           />
 
           <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
@@ -282,57 +283,57 @@ export function AuditLogsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f1f5f9" },
+  safe: { flex: 1, backgroundColor: theme.colors.bg },
   wrap: { flex: 1, padding: 16, gap: 10 },
   scroll: { padding: 16, paddingBottom: 28, gap: 10 },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  title: { fontSize: 20, fontWeight: "900", color: "#0f172a" },
-  help: { fontSize: 14, color: "#475569" },
+  title: { fontSize: 20, fontWeight: "900", color: theme.colors.textBright },
+  help: { fontSize: 14, color: theme.colors.text },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
     padding: 14,
     gap: 8,
   },
-  sub: { fontSize: 13, fontWeight: "900", color: "#0f172a", opacity: 0.85 },
+  sub: { fontSize: 13, fontWeight: "900", color: theme.colors.textBright, opacity: 0.85 },
   row: { gap: 8 },
-  label: { marginTop: 6, fontSize: 12, fontWeight: "800", color: "#334155" },
+  label: { marginTop: 6, fontSize: 12, fontWeight: "800", color: theme.colors.textBright },
   input: {
     marginTop: 6,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: theme.colors.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: "#0f172a",
-    backgroundColor: "#fff",
+    color: theme.colors.textBright,
+    backgroundColor: theme.colors.surface,
   },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#fff",
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
   },
-  chipActive: { backgroundColor: "#0ea5e9", borderColor: "#0ea5e9" },
-  chipText: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
-  chipTextActive: { color: "#fff" },
-  btnPrimary: { flex: 1, backgroundColor: "#15803d", paddingVertical: 12, borderRadius: 10, alignItems: "center" },
-  btnPrimaryText: { color: "#fff", fontWeight: "900" },
-  btnGhost: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: "#cbd5e1", alignItems: "center" },
-  btnGhostText: { color: "#334155", fontWeight: "900" },
-  error: { padding: 12, borderRadius: 12, backgroundColor: "rgba(239,68,68,0.10)", borderWidth: 1, borderColor: "rgba(239,68,68,0.25)" },
-  errorText: { color: "#b91c1c", fontWeight: "800" },
-  logRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#e2e8f0", gap: 2 },
-  logAction: { fontSize: 13, fontWeight: "900", color: "#0f172a" },
-  logTime: { fontSize: 11, color: "#64748b", fontWeight: "800" },
-  logMeta: { fontSize: 12, color: "#334155", fontWeight: "700" },
-  logDesc: { fontSize: 12, color: "#475569" },
+  chipActive: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
+  chipText: { fontSize: 12, fontWeight: "800", color: theme.colors.text },
+  chipTextActive: { color: theme.colors.textInverse },
+  btnPrimary: { flex: 1, backgroundColor: theme.colors.accentHover, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
+  btnPrimaryText: { color: theme.colors.textInverse, fontWeight: "900" },
+  btnGhost: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.borderStrong, alignItems: "center" },
+  btnGhostText: { color: theme.colors.text, fontWeight: "900" },
+  error: { padding: 12, borderRadius: 12, backgroundColor: "rgba(239,68,68,0.08)", borderWidth: 1, borderColor: "rgba(239,68,68,0.25)" },
+  errorText: { color: theme.colors.red, fontWeight: "800" },
+  logRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: theme.colors.divider, gap: 2 },
+  logAction: { fontSize: 13, fontWeight: "900", color: theme.colors.textBright },
+  logTime: { fontSize: 11, color: theme.colors.textMuted, fontWeight: "800" },
+  logMeta: { fontSize: 12, color: theme.colors.text, fontWeight: "700" },
+  logDesc: { fontSize: 12, color: theme.colors.text },
   pager: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 10 },
-  pagerText: { fontSize: 12, color: "#475569", fontWeight: "800" },
+  pagerText: { fontSize: 12, color: theme.colors.text, fontWeight: "800" },
 });
 

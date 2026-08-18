@@ -12,7 +12,7 @@ import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
 import { clearOneSignalUser } from "./oneSignalService.js";
-import { onSessionExpired } from "./utils/sessionEvents.js";
+import { onSessionExpired, onPasswordChangeRequired } from "./utils/sessionEvents.js";
 import { navigationRef } from "./navigationRef.js";
 import { theme } from "./theme.js";
 import { showError } from "./utils/feedback.js";
@@ -110,6 +110,24 @@ export function AuthProvider({ children }) {
       resetToLogin();
     });
   }, []);
+
+  useEffect(() => {
+    return onPasswordChangeRequired(async () => {
+      if (!userRef.current) return;
+      setUser((prev) => (prev ? { ...prev, must_change_password: true } : null));
+      if (api) {
+        const cached = await api.readCachedUser();
+        if (cached) {
+          cached.must_change_password = true;
+          await api.persistCachedUser(cached);
+        }
+      }
+      showError("Your password must be changed before proceeding.");
+      if (navigationRef.isReady()) {
+        navigationRef.navigate("ChangePassword");
+      }
+    });
+  }, [api]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {

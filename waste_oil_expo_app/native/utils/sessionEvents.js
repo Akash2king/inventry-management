@@ -1,5 +1,6 @@
 const expiredListeners = new Set();
 const refreshedListeners = new Set();
+const passwordChangeListeners = new Set();
 
 export function onSessionExpired(listener) {
   expiredListeners.add(listener);
@@ -30,3 +31,19 @@ export function emitTokensRefreshed() {
     }
   });
 }
+
+export function onPasswordChangeRequired(listener) {
+  passwordChangeListeners.add(listener);
+  return () => passwordChangeListeners.delete(listener);
+}
+
+export function emitPasswordChangeRequired() {
+  passwordChangeListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+}
+

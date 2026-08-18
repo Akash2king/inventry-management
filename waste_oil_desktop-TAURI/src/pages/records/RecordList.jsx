@@ -11,6 +11,8 @@ import * as recordsApi from "@/api/records.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
 import { downloadExcelFile } from "@/utils/excelExport.js";
 import { isPeerDashboardRole } from "@/utils/dashboardRoles.js";
+import { useDebouncedValue } from "@/utils/useDebouncedValue.js";
+import { STAGE_LABELS } from "@/pages/dashboardConstants.js";
 
 const PAGE_SIZE = 20;
 const EXPORT_PAGE_SIZE = 100;
@@ -22,6 +24,7 @@ export function RecordList() {
   const records = useRecordStore((s) => s.records);
   const pagination = useRecordStore((s) => s.pagination);
   const isLoading = useRecordStore((s) => s.isLoading);
+  const storeError = useRecordStore((s) => s.error);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
@@ -38,6 +41,9 @@ export function RecordList() {
   const departmentId = searchParams.get("department_id") || "";
 
   const spKey = searchParams.toString();
+
+  // Search fires an API call per keystroke otherwise; wait for a typing pause.
+  const debouncedVendorSearch = useDebouncedValue(vendorSearch, 300);
 
   const patchParams = useCallback(
     (updates) => {
@@ -112,7 +118,7 @@ export function RecordList() {
     if (stage) filters.stage = stage;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
-    if (vendorSearch.trim()) filters.search = vendorSearch.trim();
+    if (debouncedVendorSearch.trim()) filters.search = debouncedVendorSearch.trim();
     if (alertLevel) filters.alert_level = alertLevel;
     if (excludeCompleted || isBelowManager) filters.exclude_completed = true;
     if (overdue) filters.overdue = true;
@@ -125,7 +131,7 @@ export function RecordList() {
     stage,
     dateFrom,
     dateTo,
-    vendorSearch,
+    debouncedVendorSearch,
     alertLevel,
     excludeCompleted,
     overdue,
@@ -235,7 +241,7 @@ export function RecordList() {
             <option value="">All</option>
             {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={String(n)}>
-                {n}
+                {n} — {STAGE_LABELS[n]}
               </option>
             ))}
           </select>
@@ -316,11 +322,27 @@ export function RecordList() {
               </tr>
             ) : null}
             {!isLoading && records.length === 0 ? (
-              <tr>
-                <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
-                  No records
-                </td>
-              </tr>
+              storeError ? (
+                <tr>
+                  <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
+                    <p style={{ color: "var(--clr-danger, #dc2626)", fontWeight: 600, marginBottom: "0.5rem" }}>
+                      Could not load records
+                    </p>
+                    <p style={{ color: "var(--clr-text-muted, #64748b)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+                      {storeError}
+                    </p>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => fetchAll({ page: 1, page_size: PAGE_SIZE }).catch(() => {})}>
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                <tr>
+                  <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
+                    No records
+                  </td>
+                </tr>
+              )
             ) : null}
             {records.map((r) => {
               const al = (r.computed_alert_level || r.alert_level || "green").toLowerCase();

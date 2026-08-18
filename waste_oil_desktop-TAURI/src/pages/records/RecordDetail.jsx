@@ -21,6 +21,8 @@ export function RecordDetail() {
   const activeRecord = useRecordStore((s) => s.activeRecord);
   const fetchTransitions = useWorkflowStore((s) => s.fetchTransitions);
   const transitions = useWorkflowStore((s) => s.transitions);
+  const storeError = useRecordStore((s) => s.error);
+  const isLoading = useRecordStore((s) => s.isLoading);
   const [fwdOpen, setFwdOpen] = useState(false);
   const [retOpen, setRetOpen] = useState(false);
 
@@ -51,7 +53,23 @@ export function RecordDetail() {
   }, [id, fetchOne, fetchTransitions, fwdOpen, retOpen]);
 
   const r = activeRecord;
+
   if (!r || String(r.id) !== String(id)) {
+    if (!isLoading && storeError) {
+      return (
+        <div className="card" style={{ textAlign: "center", padding: "2rem", maxWidth: 480, margin: "3rem auto" }}>
+          <p style={{ color: "var(--clr-danger, #dc2626)", fontWeight: 600, marginBottom: "0.5rem" }}>
+            Could not load record
+          </p>
+          <p style={{ color: "var(--clr-text-muted, #64748b)", fontSize: "0.9rem", marginBottom: "1rem" }}>
+            {storeError}
+          </p>
+          <button type="button" className="btn btn-primary" onClick={() => fetchOne(id).catch(() => {})}>
+            Retry
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="fullscreen-center">
         <div className="spinner" />
@@ -86,8 +104,15 @@ export function RecordDetail() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h2 style={{ margin: 0, color: "var(--clr-text-bright)" }}>{r.record_number}</h2>
-        <button type="button" className="btn btn-ghost" onClick={() => navigate("/records")}>
-          Back to list
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => {
+            if (window.history.state && window.history.state.idx > 0) navigate(-1);
+            else navigate("/records");
+          }}
+        >
+          Back
         </button>
       </div>
 

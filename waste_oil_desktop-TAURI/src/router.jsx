@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import {
   createHashRouter,
   Navigate,
@@ -7,9 +7,11 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
+import { useUiStore } from "@/store/uiStore.js";
 import { AuthGuard } from "@/components/layout/AuthGuard.jsx";
 import { Layout } from "@/components/layout/Layout.jsx";
 import { PageLoading } from "@/components/layout/PageLoading.jsx";
+import { ErrorBoundary } from "@/components/ErrorBoundary.jsx";
 import { navigateFromNotificationMetadata } from "@/utils/notificationNavigation.js";
 
 /** Named-export pages → lazy (smaller cold start for packaged EXE). */
@@ -51,12 +53,22 @@ const SettingsPage = lazy(() =>
 );
 
 function SuspensePage({ children }) {
-  return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <ErrorBoundary>{children}</ErrorBoundary>
+    </Suspense>
+  );
 }
 
 function GmOnly({ children }) {
   const role = useAuthStore((s) => s.user?.role);
+  const showToast = useUiStore((s) => s.showToast);
+  const toasted = useRef(false);
   if (role !== "gm" && role !== "superadmin") {
+    if (!toasted.current) {
+      toasted.current = true;
+      showToast("You don't have permission to access that page.", "error");
+    }
     return <Navigate to="/" replace />;
   }
   return children;
@@ -64,7 +76,13 @@ function GmOnly({ children }) {
 
 function ManagerOrGmOnly({ children }) {
   const role = useAuthStore((s) => s.user?.role);
+  const showToast = useUiStore((s) => s.showToast);
+  const toasted = useRef(false);
   if (role !== "manager" && role !== "gm" && role !== "superadmin") {
+    if (!toasted.current) {
+      toasted.current = true;
+      showToast("You don't have permission to access that page.", "error");
+    }
     return <Navigate to="/" replace />;
   }
   return children;
@@ -77,6 +95,8 @@ function ManagerOrGmOnly({ children }) {
 function PasswordGate() {
   const user = useAuthStore((s) => s.user);
   const loc = useLocation();
+  const showToast = useUiStore((s) => s.showToast);
+  const toasted = useRef(false);
   if (!user?.must_change_password) {
     return <Outlet />;
   }
@@ -87,6 +107,10 @@ function PasswordGate() {
   const m = /^\/records\/([^/]+)$/.exec(p);
   if (m && m[1] !== "new") {
     return <Outlet />;
+  }
+  if (!toasted.current) {
+    toasted.current = true;
+    showToast("You must change your password before accessing other pages.", "error");
   }
   return <Navigate to="/change-password" replace />;
 }

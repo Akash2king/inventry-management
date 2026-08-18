@@ -13,6 +13,19 @@ function getToken() {
   return useAuthStore.getState().accessToken;
 }
 
+/** Guard against losing edits: confirm before navigating away while dirty. */
+function useUnsavedChangesGuard(isDirty) {
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+}
+
 export function RecordEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -20,9 +33,14 @@ export function RecordEdit() {
   const fetchOne = useRecordStore((s) => s.fetchOne);
   const updateRecord = useRecordStore((s) => s.updateRecord);
   const activeRecord = useRecordStore((s) => s.activeRecord);
+  const storeError = useRecordStore((s) => s.error);
+  const isLoading = useRecordStore((s) => s.isLoading);
   const [busy, setBusy] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [vendors, setVendors] = useState([]);
   const [optionSets, setOptionSets] = useState({});
+
+  useUnsavedChangesGuard(isDirty);
 
   useEffect(() => {
     if (id) fetchOne(id).catch(() => {});
@@ -78,7 +96,23 @@ export function RecordEdit() {
   }
 
   const r = activeRecord;
+
   if (!r || String(r.id) !== String(id)) {
+    if (!isLoading && storeError) {
+      return (
+        <div className="card" style={{ textAlign: "center", padding: "2rem", maxWidth: 480, margin: "3rem auto" }}>
+          <p style={{ color: "var(--clr-danger, #dc2626)", fontWeight: 600, marginBottom: "0.5rem" }}>
+            Could not load record
+          </p>
+          <p style={{ color: "var(--clr-text-muted, #64748b)", fontSize: "0.9rem", marginBottom: "1rem" }}>
+            {storeError}
+          </p>
+          <button type="button" className="btn btn-primary" onClick={() => fetchOne(id).catch(() => {})}>
+            Retry
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="fullscreen-center">
         <div className="spinner" />
@@ -112,6 +146,7 @@ export function RecordEdit() {
         await recordsApi.uploadPhoto(id, photo, getToken());
       }
       showToast("Record updated", "success");
+      setIsDirty(false);
       navigate(`/records/${id}`);
     } catch (e) {
       showToast(e.message || "Update failed", "error");
@@ -172,8 +207,13 @@ export function RecordEdit() {
             optionManageEnabled={user?.role === "storeman" || user?.role === "gm" || user?.role === "superadmin"}
             onCreateOption={handleCreateOption}
             onDeleteOption={handleDeleteOption}
+            onDirtyChange={setIsDirty}
             onSubmit={onSubmit}
-            onCancel={() => navigate(`/records/${id}`)}
+            onCancel={() => {
+              if (isDirty && !window.confirm("Discard unsaved changes to this record?")) return;
+              setIsDirty(false);
+              navigate(`/records/${id}`);
+            }}
             submitLabel="Save"
             isSubmitting={busy}
           />

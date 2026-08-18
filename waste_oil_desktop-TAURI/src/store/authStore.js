@@ -89,19 +89,6 @@ export const useAuthStore = create((set, get) => ({
     return res.data;
   },
 
-  updateProfile: async (payload) => {
-    if (!window.api?.auth?.updateProfile) {
-      throw new Error("API not available");
-    }
-    const res = await window.api.auth.updateProfile(payload || {});
-    if (!res.ok) {
-      throw new Error(res.error || "Could not update profile");
-    }
-    persistCachedUser(res.data);
-    set({ user: res.data });
-    return res.data;
-  },
-
   logout: async () => {
     const rt = get().refreshToken;
     try {

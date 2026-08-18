@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { humanizeApiErrorBody } from "../src/utils/apiErrors.js";
-import { emitSessionExpired, emitTokensRefreshed } from "./utils/sessionEvents.js";
+import {
+  emitSessionExpired,
+  emitTokensRefreshed,
+  emitPasswordChangeRequired,
+} from "./utils/sessionEvents.js";
 
 const LS_ACCESS = "wom_access_token";
 const LS_REFRESH = "wom_refresh_token";
@@ -63,6 +67,8 @@ export function createNativeApi(rawBaseUrl) {
     throw new Error("API base URL is empty");
   }
 
+  let activeRefreshPromise = null;
+
   async function getAccessToken() {
     const t = await AsyncStorage.getItem(LS_ACCESS);
     return t || "";
@@ -93,39 +99,61 @@ export function createNativeApi(rawBaseUrl) {
   }
 
   async function tryRefreshAccess() {
-    const refresh = (await AsyncStorage.getItem(LS_REFRESH)) || "";
-    if (!refresh) {
-      return false;
+    if (activeRefreshPromise) {
+      return activeRefreshPromise;
     }
-    const url = `${base}/auth/refresh/`;
-    let res;
-    try {
-      res = await fetchWithTimeout(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refresh }),
-      });
-    } catch {
-      return false;
-    }
-    const text = await res.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
+
+    activeRefreshPromise = (async () => {
+      const refresh = (await AsyncStorage.getItem(LS_REFRESH)) || "";
+      if (!refresh) {
+        return false;
       }
+      const url = `${base}/auth/refresh/`;
+      let res;
+      try {
+        res = await fetchWithTimeout(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refresh }),
+        });
+      } catch {
+        return "network_error";
+      }
+
+      if (!res.ok) {
+        if (res.status >= 500) {
+          return "server_error";
+        }
+        return false;
+      }
+
+      const text = await res.text();
+      let data = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      }
+
+      if (!data?.access_token) {
+        return false;
+      }
+
+      await AsyncStorage.setItem(LS_ACCESS, data.access_token);
+      if (data.refresh_token) {
+        await AsyncStorage.setItem(LS_REFRESH, data.refresh_token);
+      }
+      emitTokensRefreshed();
+      return true;
+    })();
+
+    try {
+      return await activeRefreshPromise;
+    } finally {
+      activeRefreshPromise = null;
     }
-    if (!res.ok || !data?.access_token) {
-      return false;
-    }
-    await AsyncStorage.setItem(LS_ACCESS, data.access_token);
-    if (data.refresh_token) {
-      await AsyncStorage.setItem(LS_REFRESH, data.refresh_token);
-    }
-    emitTokensRefreshed();
-    return true;
   }
 
   async function request(method, path, options = {}) {
@@ -184,7 +212,7 @@ export function createNativeApi(rawBaseUrl) {
       typeof data === "object" &&
       data.code === "password_change_required"
     ) {
-      /* consumer can inspect data */
+      emitPasswordChangeRequired();
     }
 
     if (res.status === 401) {
@@ -198,10 +226,18 @@ export function createNativeApi(rawBaseUrl) {
         !p.startsWith("auth/logout");
       if (canTryRefresh) {
         const refreshed = await tryRefreshAccess();
-        if (refreshed) {
+        if (refreshed === true) {
           const retryOpts = { ...options, _didRefresh: true };
           delete retryOpts.token;
           return request(method, path, retryOpts);
+        } else if (refreshed === "network_error" || refreshed === "server_error") {
+          return {
+            ok: false,
+            status: refreshed === "network_error" ? 0 : 500,
+            error: refreshed === "network_error"
+              ? "Network error during token refresh. Check connection."
+              : "Server error during token refresh.",
+          };
         }
       }
       if (!skipAuth && authToken) {

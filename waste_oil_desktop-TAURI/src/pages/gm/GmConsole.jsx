@@ -7,6 +7,7 @@ import * as gmApi from "@/api/gm.js";
 import { showToast } from "@/components/ui/ToastContainer.jsx";
 import { savePdfBytes } from "@/utils/pdfExport.js";
 import { downloadGmReportExcel } from "@/utils/gmReportExcelExport.js";
+import { useDebouncedValue } from "@/utils/useDebouncedValue.js";
 
 /** Hierarchy roles below GM. */
 const ROLE_OPTIONS = [
@@ -39,6 +40,7 @@ export function GmConsole() {
   const [deptFilter, setDeptFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const [reportFrom, setReportFrom] = useState("");
   const [reportTo, setReportTo] = useState("");
@@ -60,10 +62,10 @@ export function GmConsole() {
     const filters = {};
     if (deptFilter) filters.department_id = deptFilter;
     if (roleFilter) filters.role = roleFilter;
-    if (search.trim()) filters.search = search.trim();
+    if (debouncedSearch.trim()) filters.search = debouncedSearch.trim();
     const data = await gmApi.getEmployees(filters, getToken());
     setEmployees(Array.isArray(data) ? data : []);
-  }, [deptFilter, roleFilter, search]);
+  }, [deptFilter, roleFilter, debouncedSearch]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

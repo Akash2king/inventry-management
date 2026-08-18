@@ -32,6 +32,7 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
   const fetchQueue = useWorkflowStore((s) => s.fetchQueue);
   const queue = useWorkflowStore((s) => s.queue);
   const isLoading = useWorkflowStore((s) => s.isLoading);
+  const storeError = useWorkflowStore((s) => s.error);
   const [fwd, setFwd] = useState(null);
   const [ret, setRet] = useState(null);
 
@@ -66,9 +67,23 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
         </div>
       ) : null}
       {!isLoading && queue.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "2rem" }}>
-          Your queue is clear
-        </div>
+        storeError ? (
+          <div className="card" style={{ textAlign: "center", padding: "2rem" }}>
+            <p style={{ color: "var(--clr-danger, #dc2626)", fontWeight: 600, marginBottom: "0.5rem" }}>
+              Could not load your queue
+            </p>
+            <p style={{ color: "var(--clr-text-muted, #64748b)", fontSize: "0.9rem", marginBottom: "1rem" }}>
+              {storeError}
+            </p>
+            <button type="button" className="btn btn-primary" onClick={() => fetchQueue().catch(() => {})}>
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="card" style={{ textAlign: "center", padding: "2rem" }}>
+            Your queue is clear
+          </div>
+        )
       ) : null}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {queue.map((r) => {

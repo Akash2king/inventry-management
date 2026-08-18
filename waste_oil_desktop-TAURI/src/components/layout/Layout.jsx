@@ -2,6 +2,7 @@ import { Link, Outlet } from "react-router-dom";
 import { useEffect } from "react";
 import { Sidebar } from "./Sidebar.jsx";
 import { Header } from "./Header.jsx";
+import { NetworkStatusBanner } from "@/components/NetworkStatusBanner.jsx";
 import { useUiStore } from "@/store/uiStore.js";
 import { useAuthStore } from "@/store/authStore.js";
 
@@ -25,6 +26,7 @@ export function Layout() {
       <Sidebar />
       <div className="main-col">
         <Header />
+        <NetworkStatusBanner />
         {mustChange ? (
           <div
             style={{

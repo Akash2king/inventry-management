@@ -199,8 +199,10 @@ export function Login() {
                   name="username"
                   autoComplete="username"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  onInput={(e) => setUsername(e.currentTarget.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (error) setError("");
+                  }}
                   placeholder="Your username"
                   disabled={!hasApi}
                 />
@@ -216,8 +218,10 @@ export function Login() {
                   type="password"
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onInput={(e) => setPassword(e.currentTarget.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
+                  }}
                   placeholder="••••••••"
                   disabled={!hasApi}
                 />

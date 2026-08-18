@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
+import { useUiStore } from "@/store/uiStore.js";
 import { humanizeApiErrorBody } from "@/utils/apiErrors.js";
 import "./login.css";
 
@@ -8,6 +9,17 @@ function IconLock() {
   return (
     <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+    </svg>
+  );
+}
+
+function IconAlert() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2 1 21h22L12 2Zm0 15a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm-1-9v6h2V8h-2Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
@@ -36,6 +48,7 @@ export function ChangePassword() {
   const isLoading = useAuthStore((s) => s.isLoading);
   const changePassword = useAuthStore((s) => s.changePassword);
   const logout = useAuthStore((s) => s.logout);
+  const showToast = useUiStore((s) => s.showToast);
 
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -79,6 +92,7 @@ export function ChangePassword() {
     setBusy(true);
     try {
       await changePassword(current, next);
+      showToast("Password updated successfully.", "success");
       navigate("/", { replace: true });
     } catch (err) {
       setError(parseError(err));
@@ -180,6 +194,7 @@ export function ChangePassword() {
             </div>
             {error ? (
               <div className="login-error" role="alert">
+                <IconAlert />
                 <span>{error}</span>
               </div>
             ) : null}
