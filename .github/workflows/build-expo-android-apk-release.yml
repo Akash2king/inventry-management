@@ -57,6 +57,20 @@ jobs:
       - name: Install deps (npm ci)
         run: npm ci
 
+      - name: Write google-services.json from secret
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -n "${GOOGLE_SERVICES_JSON}" ]; then
+            echo "${GOOGLE_SERVICES_JSON}" > google-services.json
+            echo "Wrote google-services.json from secret"
+          else
+            echo "WARNING: GOOGLE_SERVICES_JSON secret not set. Creating minimal stub."
+            echo '{"project_info":{"project_number":"000000000000","project_id":"stub","storage_bucket":"stub"},"client":[{"client_info":{"mobilesdk_app_id":"1:000:android:000","android_client_info":{"package_name":"com.chemsolv.inventory"}},"api_key":[{"current_key":"stub"}]}]}' > google-services.json
+          fi
+
       - name: Expo prebuild (generate native Android project)
         run: npx expo prebuild --platform android --no-install
 
@@ -138,13 +152,14 @@ jobs:
           print("Patched", p)
           PY
 
-      - name: Copy Google services config for local Android build
+      - name: Ensure google-services.json is in android/app
         shell: bash
         run: |
           set -euo pipefail
-          test -f ../google-services.json
-          mkdir -p android/app
-          cp ../google-services.json android/app/google-services.json
+          if [ -f google-services.json ] && [ ! -f android/app/google-services.json ]; then
+            cp google-services.json android/app/google-services.json
+          fi
+          test -f android/app/google-services.json || { echo "ERROR: android/app/google-services.json missing" >&2; exit 1; }
 
       - name: Write Android keystore + signing props
         shell: bash
