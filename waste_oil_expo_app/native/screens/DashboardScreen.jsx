@@ -23,6 +23,7 @@ import { useResponsive } from "../utils/responsive.js";
 import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 import appLogo from "../../src/assets/app-logo.png";
 import * as FileSystem from "expo-file-system/legacy";
+import { ensureDocsDir } from "../utils/fileUtils.js";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 
@@ -326,7 +327,7 @@ export function DashboardScreen({ navigation }) {
       { id: "overdue", label: "Overdue", value: String(overdue.length), icon: "alert-circle-outline", slice: "overdue" },
       { id: "queue", label: "My queue", value: String(queue.length), icon: "list-outline", slice: "queue" },
       { id: "completed", label: "Completion", value: `${completionRate}%`, icon: "checkmark-done-outline", slice: "completed" },
-      { id: "loaded", label: "Loaded", value: String(records.length), icon: "cloud-download-outline", slice: "loaded" },
+      { id: "dueSoon", label: "Due soon", value: String(dueSoon.length), icon: "time-outline", slice: "dueSoon" },
     ];
   }, [peer, queue.length, atMyStageOpen.length, dueSoon.length, overdue.length, active.length, completionRate, records.length]);
 

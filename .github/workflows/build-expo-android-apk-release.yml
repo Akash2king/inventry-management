@@ -3,11 +3,15 @@ name: Build Expo Android APK (Release)
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+      - master
+      - "fix/expo-android-ux-bugs"
     paths:
       - "waste_oil_expo_app/**"
       - ".github/workflows/build-expo-android-apk-release.yml"
+  release:
+    types: [published]
 
 concurrency:
   group: build-expo-android-apk-release-${{ github.ref }}
@@ -15,6 +19,8 @@ concurrency:
 
 jobs:
   build-apk:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -50,6 +56,23 @@ jobs:
 
       - name: Install deps (npm ci)
         run: npm ci
+
+      - name: Write google-services.json from secret
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -n "${GOOGLE_SERVICES_JSON}" ]; then
+            echo "${GOOGLE_SERVICES_JSON}" > google-services.json
+            echo "Wrote google-services.json from secret"
+          else
+            echo "WARNING: GOOGLE_SERVICES_JSON secret not set. Creating minimal stub."
+            echo '{"project_info":{"project_number":"000000000000","project_id":"stub","storage_bucket":"stub"},"client":[{"client_info":{"mobilesdk_app_id":"1:000:android:000","android_client_info":{"package_name":"com.chemsolv.inventory"}},"api_key":[{"current_key":"stub"}]}]}' > google-services.json
+          fi
+
+      - name: Expo prebuild (generate native Android project)
+        run: npx expo prebuild --platform android --no-install
 
       - name: Patch Gradle for CI release signing
         shell: bash
@@ -129,13 +152,14 @@ jobs:
           print("Patched", p)
           PY
 
-      - name: Copy Google services config for local Android build
+      - name: Ensure google-services.json is in android/app
         shell: bash
         run: |
           set -euo pipefail
-          test -f ../google-services.json
-          mkdir -p android/app
-          cp ../google-services.json android/app/google-services.json
+          if [ -f google-services.json ] && [ ! -f android/app/google-services.json ]; then
+            cp google-services.json android/app/google-services.json
+          fi
+          test -f android/app/google-services.json || { echo "ERROR: android/app/google-services.json missing" >&2; exit 1; }
 
       - name: Write Android keystore + signing props
         shell: bash
@@ -177,11 +201,18 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Chem-Solv Inventory-${{ github.ref_name }}-apk
+          name: Chem-Solv-Inventory-${{ github.ref_name }}-apk
           path: waste_oil_expo_app/${{ env.APK_PATH }}
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' || github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: expo-apk-${{ github.ref_name }}-${{ github.run_number }}
+          name: "Chem-Solv Android APK — ${{ github.ref_name }} #${{ github.run_number }}"
+          body: |
+            Automated Android APK build from commit [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) on branch `${{ github.ref_name }}`.
+
+            Download the **APK** from the assets below.
           files: waste_oil_expo_app/${{ env.APK_PATH }}
+          generate_release_notes: true

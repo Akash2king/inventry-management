@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useAuth } from "../AuthContext.jsx";
 import * as FileSystem from "expo-file-system/legacy";
+import { ensureDocsDir } from "../utils/fileUtils.js";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 import { theme } from "../theme.js";
@@ -35,6 +36,7 @@ import { useResponsive } from "../utils/responsive.js";
 import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 
 const STAGES = ["", "1", "2", "3", "4", "5"];
+const STAGE_DISPLAY = { "": "All", "1": "S1 – Storeman", "2": "S2 – Treatment", "3": "S3 – Admin", "4": "S4 – Manager", "5": "S5 – GM" };
 const ALERTS = ["", "green", "yellow", "orange", "red", "completed"];
 
 async function ensureDocsDir() {
@@ -90,6 +92,11 @@ export function RecordsScreen({ navigation }) {
   const [departmentId, setDepartmentId] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
   const [datePicker, setDatePicker] = useState(null);
+  // Committed filters — only updated on Apply or search submit to avoid API calls on every keystroke.
+  const [committedSearch, setCommittedSearch] = useState("");
+  const [committedDateFrom, setCommittedDateFrom] = useState("");
+  const [committedDateTo, setCommittedDateTo] = useState("");
+  const [committedDeptId, setCommittedDeptId] = useState("");
 
   const excludeCompleted = mode !== "all";
   const canSeeAll = user?.role === "gm" || user?.role === "superadmin" || user?.role === "manager";
@@ -99,13 +106,13 @@ export function RecordsScreen({ navigation }) {
     let n = 0;
     if (stage) n += 1;
     if (alert) n += 1;
-    if (search.trim()) n += 1;
-    if (dateFrom.trim()) n += 1;
-    if (dateTo.trim()) n += 1;
+    if (committedSearch.trim()) n += 1;
+    if (committedDateFrom.trim()) n += 1;
+    if (committedDateTo.trim()) n += 1;
     if (overdueOnly) n += 1;
-    if (departmentId.trim()) n += 1;
+    if (committedDeptId.trim()) n += 1;
     return n;
-  }, [stage, alert, search, dateFrom, dateTo, overdueOnly, departmentId]);
+  }, [stage, alert, committedSearch, committedDateFrom, committedDateTo, overdueOnly, committedDeptId]);
 
   function applyPickedDate(event, selectedDate) {
     const field = datePicker;
@@ -134,23 +141,27 @@ export function RecordsScreen({ navigation }) {
     if (isBelowManager && alert === "completed") setAlert("");
   }, [isBelowManager, alert]);
 
+  // Build filter params from current committed + immediate state
+  const buildFilters = useCallback((overrides = {}) => ({
+    exclude_completed: (overrides.forceMode || effectiveMode) !== "all",
+    stage: stage || undefined,
+    date_from: overrides.dateFrom ?? (committedDateFrom || undefined),
+    date_to: overrides.dateTo ?? (committedDateTo || undefined),
+    search: overrides.search ?? (committedSearch.trim() || undefined),
+    alert_level: alert || undefined,
+    overdue: overdueOnly ? true : undefined,
+    department_id: overrides.deptId ?? (committedDeptId || undefined),
+  }), [effectiveMode, stage, committedDateFrom, committedDateTo, committedSearch, alert, overdueOnly, committedDeptId]);
+
   const load = useCallback(async (nextPage = 1, opts = {}) => {
     if (!api) return;
     const append = Boolean(opts.append);
-    const forceMode = opts.forceMode;
-    const effective = forceMode || effectiveMode;
-    const res = await api.records.getAll({
+    const filters = {
       page: nextPage,
       page_size: 100,
-      exclude_completed: effective !== "all",
-      stage: stage || undefined,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
-      search: search.trim() || undefined,
-      alert_level: alert || undefined,
-      overdue: overdueOnly ? true : undefined,
-      department_id: departmentId || undefined,
-    });
+      ...buildFilters(opts),
+    };
+    const res = await api.records.getAll(filters);
     if (res.ok) {
       const list = Array.isArray(res.data?.results) ? res.data.results : [];
       setRecords((prev) => (nextPage === 1 || !append ? list : [...prev, ...list]));
@@ -161,7 +172,7 @@ export function RecordsScreen({ navigation }) {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [api, effectiveMode, search, stage, dateFrom, dateTo, alert, overdueOnly, departmentId]);
+  }, [api, buildFilters]);
 
   useEffect(() => {
     setLoading(true);
@@ -175,6 +186,33 @@ export function RecordsScreen({ navigation }) {
     await refreshUser();
     await load(1, { append: false });
   };
+
+  // Apply committed filters (date, department, search)
+  const applyFilters = useCallback(() => {
+    setCommittedSearch(search);
+    setCommittedDateFrom(dateFrom);
+    setCommittedDateTo(dateTo);
+    setCommittedDeptId(departmentId);
+    setLoading(true);
+    // Pass new values directly so load doesn't use stale closure
+    void load(1, { append: false, search: search.trim() || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, deptId: departmentId || undefined });
+  }, [search, dateFrom, dateTo, departmentId, load]);
+
+  const clearAllFilters = useCallback(() => {
+    setStage("");
+    setAlert("");
+    setSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setOverdueOnly(false);
+    setDepartmentId("");
+    setCommittedSearch("");
+    setCommittedDateFrom("");
+    setCommittedDateTo("");
+    setCommittedDeptId("");
+    setLoading(true);
+    void load(1, { append: false });
+  }, [load]);
 
   const canLoadMore = records.length > 0 && total > records.length;
   const loadNext = useCallback(async () => {
@@ -198,14 +236,7 @@ export function RecordsScreen({ navigation }) {
         const res = await api.records.getAll({
           page: pageNum,
           page_size: PAGE_SIZE,
-          exclude_completed: effectiveMode !== "all",
-          stage: stage || undefined,
-          date_from: dateFrom || undefined,
-          date_to: dateTo || undefined,
-          search: search.trim() || undefined,
-          alert_level: alert || undefined,
-          overdue: overdueOnly ? true : undefined,
-          department_id: departmentId || undefined,
+          ...buildFilters(),
         });
         if (!res.ok) throw new Error(res.error || "Export failed");
         const rows = Array.isArray(res.data?.results) ? res.data.results : [];
@@ -275,7 +306,7 @@ export function RecordsScreen({ navigation }) {
     } finally {
       setExportBusy(false);
     }
-  }, [api, effectiveMode, stage, dateFrom, dateTo, search, alert, overdueOnly, departmentId]);
+  }, [api, buildFilters]);
 
   const openRecord = useCallback(
     (item) => {
@@ -349,17 +380,7 @@ export function RecordsScreen({ navigation }) {
             {activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"}
           </Text>
           <TouchableOpacity
-            onPress={() => {
-              setStage("");
-              setAlert("");
-              setSearch("");
-              setDateFrom("");
-              setDateTo("");
-              setOverdueOnly(false);
-              setDepartmentId("");
-              setLoading(true);
-              void load(1, { append: false });
-            }}
+            onPress={clearAllFilters}
           >
             <Text style={styles.filterBannerAction}>Clear all</Text>
           </TouchableOpacity>
@@ -379,7 +400,7 @@ export function RecordsScreen({ navigation }) {
                     style={[styles.chip, on && styles.chipOn]}
                     onPress={() => setStage(s)}
                   >
-                    <Text style={[styles.chipText, on && styles.chipTextOn]}>{s ? `S${s}` : "All"}</Text>
+                    <Text style={[styles.chipText, on && styles.chipTextOn]}>{STAGE_DISPLAY[s] || `S${s}`}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -447,25 +468,13 @@ export function RecordsScreen({ navigation }) {
           <View style={styles.filterActions}>
             <TouchableOpacity
               style={styles.filterBtnGhost}
-              onPress={() => {
-                setStage("");
-                setAlert("");
-                setDateFrom("");
-                setDateTo("");
-                setOverdueOnly(false);
-                setDepartmentId("");
-                setLoading(true);
-                void load(1, { append: false });
-              }}
+              onPress={clearAllFilters}
             >
               <Text style={styles.filterBtnGhostText}>Clear</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.filterBtnPrimary}
-              onPress={() => {
-                setLoading(true);
-                void load(1, { append: false });
-              }}
+              onPress={applyFilters}
             >
               <Text style={styles.filterBtnPrimaryText}>Apply</Text>
             </TouchableOpacity>
@@ -477,10 +486,7 @@ export function RecordsScreen({ navigation }) {
         value={search}
         onChangeText={setSearch}
         placeholder="Record number, vendor…"
-        onSubmit={() => {
-          setLoading(true);
-          void load(1);
-        }}
+        onSubmit={applyFilters}
       />
       </ContentWidth>
       {loading ? (
