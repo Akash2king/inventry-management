@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
+import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../theme.js";
 import { Button, Card, FadeIn, KeyboardAwareScroll } from "../components/ui/index.js";
 import { showError, showBlockingError } from "../utils/feedback.js";
@@ -23,6 +24,7 @@ export function LoginScreen({ navigation }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleLogin() {
     if (!api) {
@@ -32,11 +34,12 @@ export function LoginScreen({ navigation }) {
       );
       return;
     }
+    setError("");
     setBusy(true);
     try {
       await login(username.trim(), password);
     } catch (e) {
-      showError(e?.message || "Login failed");
+      setError(e?.message || "Login failed");
     } finally {
       setBusy(false);
     }
@@ -69,7 +72,7 @@ export function LoginScreen({ navigation }) {
           <Text style={[styles.label, type.label]}>Username</Text>
           <TextInput
             value={username}
-            onChangeText={setUsername}
+            onChangeText={(t) => { setUsername(t); if (error) setError(""); }}
             autoCapitalize="none"
             autoCorrect={false}
             editable={Boolean(api)}
@@ -78,13 +81,19 @@ export function LoginScreen({ navigation }) {
           <Text style={[styles.label, type.label]}>Password</Text>
           <TextInput
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => { setPassword(t); if (error) setError(""); }}
             secureTextEntry
             editable={Boolean(api)}
             returnKeyType="go"
             onSubmitEditing={() => void handleLogin()}
             style={[styles.input, type.input, type.inputPad]}
           />
+          {error ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle-outline" size={16} color={theme.colors.red} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
           <Button
             title="Sign in"
             onPress={() => void handleLogin()}
@@ -184,6 +193,23 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     fontSize: 16,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.25)",
+    borderRadius: theme.radius.md,
+    padding: 12,
+    marginBottom: 14,
+  },
+  errorText: {
+    flex: 1,
+    color: theme.colors.red,
+    fontSize: 13,
+    fontWeight: "600",
   },
   secondary: {
     marginTop: 14,

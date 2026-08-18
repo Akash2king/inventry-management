@@ -25,6 +25,7 @@ import { EmptyState, KeyboardAwareScroll, LoadingBlock, ModalHeader, ModalShell 
 import { diffDays, formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
 import { useScrollContentStyle } from "../utils/responsive.js";
 import * as FileSystem from "expo-file-system/legacy";
+import { ensureDocsDir } from "../utils/fileUtils.js";
 import * as Sharing from "expo-sharing";
 import { fromByteArray } from "base64-js";
 
@@ -258,6 +259,12 @@ export function RecordDetailScreen({ navigation, route }) {
           title="Record not found"
           message="It may have been removed or you may not have access."
         />
+        <TouchableOpacity
+          style={[styles.primary, { alignSelf: "center", marginTop: 16 }]}
+          onPress={() => { setLoading(true); void load(); }}
+        >
+          <Text style={styles.primaryTxt}>Retry</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -365,15 +372,7 @@ export function RecordDetailScreen({ navigation, route }) {
           </View>
         </View>
 
-        <Text style={styles.line}>
-          Vendor: {record.vendor_name || record.vendor?.name || "—"}
-        </Text>
-        <Text style={styles.line}>Stage: {record.current_stage} — {stageName}</Text>
-        <Text style={styles.line}>Alert: {record.alert_level || "—"}</Text>
-        <Text style={styles.line}>Qty: {record.quantity ?? "—"} {record.unit || ""}</Text>
-        <Text style={styles.line}>Department: {record.current_department_name || "—"}</Text>
-        <Text style={styles.line}>Current holder: {holderLabel}</Text>
-        {record.remarks ? <Text style={styles.block}>Remarks: {record.remarks}</Text> : null}
+
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Workflow timeline</Text>
@@ -707,17 +706,7 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 11, fontWeight: "900", color: theme.colors.text },
   infoValue: { marginTop: 4, fontSize: 13, lineHeight: 17, fontWeight: "900", color: theme.colors.textBright },
-  line: {
-    display: "none",
-    fontSize: 15,
-    color: theme.colors.textBright,
-  },
-  block: {
-    marginTop: 12,
-    fontSize: 14,
-    color: theme.colors.text,
-    lineHeight: 22,
-  },
+
   muted: {
     color: theme.colors.text,
     fontSize: 15,

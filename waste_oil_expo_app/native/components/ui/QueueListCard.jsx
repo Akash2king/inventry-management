@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { STAGE_LABELS } from "../../../src/utils/stageLabels.js";
 import { theme } from "../../theme.js";
 import { StatusChip } from "./StatusChip.jsx";
 

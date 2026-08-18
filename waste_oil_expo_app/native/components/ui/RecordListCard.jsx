@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { STAGE_LABELS } from "../../../src/utils/stageLabels.js";
 import { theme } from "../../theme.js";
 import { StatusChip } from "./StatusChip.jsx";
 
@@ -17,7 +18,7 @@ function RecordListCardInner({ item, onPress, formatDate, formatQty, slaTotalDay
         ? `${slaTotalDays(item.entry_date, item.due_date)}d SLA`
         : null;
   const meta = [
-    item.current_stage != null ? `Stage ${item.current_stage}` : null,
+    item.current_stage != null ? `Stage ${item.current_stage}${STAGE_LABELS[Number(item.current_stage) - 1] ? " – " + STAGE_LABELS[Number(item.current_stage) - 1] : ""}` : null,
     formatQty(item.quantity, item.unit),
     item.entry_date ? `Entry ${formatDate(item.entry_date)}` : null,
     item.due_date ? `Due ${formatDate(item.due_date)}` : null,
