@@ -57,6 +57,9 @@ jobs:
       - name: Install deps (npm ci)
         run: npm ci
 
+      - name: Expo prebuild (generate native Android project)
+        run: npx expo prebuild --platform android --no-install
+
       - name: Patch Gradle for CI release signing
         shell: bash
         run: |
