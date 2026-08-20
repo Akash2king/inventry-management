@@ -17,8 +17,8 @@ if [ -f "$ROOT/.env" ]; then
 fi
 
 echo "==> Expo prebuild (android) if needed..."
-if [ ! -f "$ROOT/android/gradlew" ]; then
-  npx expo prebuild --platform android --no-install
+if [ ! -f "$ROOT/android/gradlew" ] || [ ! -f "$ROOT/android/app/build.gradle" ]; then
+  bash "$ROOT/scripts/ci-generate-native-android.sh"
 fi
 
 echo "==> Building release APK (Gradle assembleRelease)..."

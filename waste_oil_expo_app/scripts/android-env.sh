@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -z "${ANDROID_HOME:-}" ]]; then
   for candidate in \
     "$HOME/Android/Sdk" \
+    "/usr/local/lib/android/sdk" \
     "/usr/lib/android-sdk" \
     "/opt/android-sdk"; do
     if [[ -d "$candidate/platform-tools" ]] || [[ -d "$candidate/cmdline-tools" ]]; then

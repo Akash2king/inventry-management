@@ -16,6 +16,7 @@
     "android": "bash scripts/build-android-release-apk.sh",
     "android:dev": "bash -c 'source scripts/android-env.sh && npx expo run:android'",
     "android:release": "bash scripts/build-android-release-apk.sh",
+    "android:ci:native": "bash scripts/ci-generate-native-android.sh",
     "android:install": "bash -c 'source scripts/android-env.sh && cd android && ./gradlew assembleRelease -x lint && adb install -r app/build/outputs/apk/release/app-release.apk && adb shell am start -n com.chemsolv.inventory/.MainActivity'",
     "ios": "expo run:ios",
     "debug:adb": "bash scripts/adb-debug-push.sh",
