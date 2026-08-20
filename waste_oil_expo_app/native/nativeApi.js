@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { humanizeApiErrorBody } from "../src/utils/apiErrors.js";
+import { humanizeApiErrorBody } from "./utils/apiErrors.js";
 import {
   emitSessionExpired,
   emitTokensRefreshed,
@@ -263,7 +263,7 @@ export function createNativeApi(rawBaseUrl) {
   }
 
   async function requestBinary(method, path, options = {}) {
-    const { token, skipAuth, headers: extra = {} } = options;
+    const { token, skipAuth, headers: extra = {}, _didRefresh } = options;
     const url = `${base}/${path.replace(/^\//, "")}`;
     const headers = { ...extra };
 
@@ -295,6 +295,32 @@ export function createNativeApi(rawBaseUrl) {
     }
 
     if (res.status === 401) {
+      const p = path.replace(/^\//, "");
+      const canTryRefresh =
+        !skipAuth &&
+        authToken &&
+        !_didRefresh &&
+        !p.startsWith("auth/login") &&
+        !p.startsWith("auth/refresh") &&
+        !p.startsWith("auth/logout");
+      if (canTryRefresh) {
+        const refreshed = await tryRefreshAccess();
+        if (refreshed === true) {
+          const retryOpts = { ...options, _didRefresh: true };
+          delete retryOpts.token;
+          return requestBinary(method, path, retryOpts);
+        }
+        if (refreshed === "network_error" || refreshed === "server_error") {
+          return {
+            ok: false,
+            status: refreshed === "network_error" ? 0 : 500,
+            error:
+              refreshed === "network_error"
+                ? "Network error during token refresh. Check connection."
+                : "Server error during token refresh.",
+          };
+        }
+      }
       if (!skipAuth && authToken) {
         await clearTokens("unauthorized");
       }
@@ -403,7 +429,7 @@ export function createNativeApi(rawBaseUrl) {
           if (res.ok) revoked += 1;
           else failed += 1;
         }
-        return { ok: failed === 0, status: failed ? 207 : 200, data: { revoked, failed } };
+        return { ok: true, status: failed ? 207 : 200, data: { revoked, failed } };
       },
     },
     vendors: {

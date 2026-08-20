@@ -3,21 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
-  "description": "Chem-Solv Inventory — native Expo app (REST) + optional Vite web build for browsers",
+  "description": "Chem-Solv Inventory — native Expo / React Native mobile app",
   "type": "commonjs",
   "scripts": {
-    "frontend:dev": "vite",
-    "frontend:build": "vite build",
-    "dev": "concurrently \"npm run frontend:dev -- --host 0.0.0.0 --port 1420\" \"npm run expo:start\"",
-    "build": "vite build",
+    "start": "expo start --clear",
     "expo:start": "expo start --clear",
     "expo:android": "bash -c 'source scripts/android-env.sh && npx expo run:android'",
     "expo:ios": "expo run:ios",
-    "expo:web": "expo start --web",
     "expo:prebuild:android": "expo prebuild --platform android --clean",
     "android:setup-sdk": "bash scripts/setup-android-sdk.sh",
     "android:apk:eas": "eas build --platform android --profile preview",
-    "preview": "vite preview --host 127.0.0.1",
     "android": "bash scripts/build-android-release-apk.sh",
     "android:dev": "bash -c 'source scripts/android-env.sh && npx expo run:android'",
     "android:release": "bash scripts/build-android-release-apk.sh",
@@ -30,7 +25,6 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
-    "@hookform/resolvers": "^3.9.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/bottom-tabs": "^7.15.11",
@@ -48,24 +42,13 @@
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
     "onesignal-expo-plugin": "2.6.0",
-    "react-native-onesignal": "5.4.7",
-    "lucide-react": "^1.14.0",
-    "pdf-lib": "^1.17.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-hook-form": "^7.54.2",
     "react-native": "0.81.5",
+    "react-native-onesignal": "5.4.7",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-router-dom": "^7.1.1",
-    "recharts": "^2.15.4",
     "xlsx": "^0.18.5",
-    "zod": "^3.24.1",
     "zustand": "^5.0.3"
   },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.1.2",
-    "vite": "^6.0.7"
-  }
+  "devDependencies": {}
 }

@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useUiStore } from "../../../src/store/uiStore.js";
+import { useUiStore } from "../../store/uiStore.js";
 import { theme } from "../../theme.js";
 import { useResponsive } from "../../utils/responsive.js";
 

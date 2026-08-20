@@ -180,7 +180,7 @@ export function SettingsPage() {
               </div>
 
               <ActionRow to="/change-password" label="Change password" />
-              <ActionRow to="/sessions" label="Devices" />
+              <ActionRow to="/sessions" label="Devices & sessions" />
               <ActionRow to="/notifications" label="Workflow notifications" />
               <ActionRow label="Re-request system notifications" onClick={() => void handleReRequestNotifications()} />
               {canAudit ? <ActionRow to="/audit-logs" label="Audit logs" /> : null}

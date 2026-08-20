@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { useUiStore } from "../../src/store/uiStore.js";
+import { useUiStore } from "../store/uiStore.js";
 
 let Haptics = null;
 try {

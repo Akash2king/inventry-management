@@ -5,9 +5,9 @@
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
-    "icon": "./src/assets/app-logo.png",
+    "icon": "./native/assets/app-logo.png",
     "splash": {
-      "image": "./src/assets/app-logo.png",
+      "image": "./native/assets/app-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#f1f4f8"
     },
@@ -18,7 +18,7 @@
       "package": "com.chemsolv.inventory",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/app-logo.png",
+        "foregroundImage": "./native/assets/app-logo.png",
         "backgroundColor": "#f1f4f8"
       }
     },
@@ -32,9 +32,6 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationsUsageDescription": "Chem-Solv Inventory shows workflow updates (records, SLA, sign-in notices) in your notification center."
       }
-    },
-    "web": {
-      "bundler": "metro"
     },
     "plugins": [
       [

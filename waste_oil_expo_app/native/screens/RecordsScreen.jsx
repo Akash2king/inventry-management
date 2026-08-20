@@ -21,6 +21,7 @@ import { theme } from "../theme.js";
 import {
   Chip,
   EmptyState,
+  ErrorBanner,
   IconAction,
   LoadingBlock,
   PageHeader,
@@ -29,8 +30,8 @@ import {
 } from "../components/ui/index.js";
 import { FLATLIST_PERF } from "../utils/listPerf.js";
 import { showSuccess, showError } from "../utils/feedback.js";
-import { formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
-import { formatHolderLine } from "../../src/utils/holderDisplay.js";
+import { formatDate, formatQty, slaTotalDays } from "../utils/formatters.js";
+import { formatHolderLine } from "../utils/holderDisplay.js";
 import { useResponsive } from "../utils/responsive.js";
 import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 
@@ -78,7 +79,9 @@ export function RecordsScreen({ navigation }) {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [mode, setMode] = useState("open"); // open | all
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [showFilters, setShowFilters] = useState(false);
@@ -156,8 +159,10 @@ export function RecordsScreen({ navigation }) {
       setRecords((prev) => (nextPage === 1 || !append ? list : [...prev, ...list]));
       setTotal(Number(res.data?.count || 0));
       setPage(nextPage);
+      setLoadError("");
     } else {
       if (nextPage === 1) setRecords([]);
+      setLoadError(res.error || "Could not load records");
     }
     setLoading(false);
     setRefreshing(false);
@@ -352,6 +357,7 @@ export function RecordsScreen({ navigation }) {
             onPress={() => {
               setStage("");
               setAlert("");
+              setSearchInput("");
               setSearch("");
               setDateFrom("");
               setDateTo("");
@@ -454,6 +460,8 @@ export function RecordsScreen({ navigation }) {
                 setDateTo("");
                 setOverdueOnly(false);
                 setDepartmentId("");
+                setSearchInput("");
+                setSearch("");
                 setLoading(true);
                 void load(1, { append: false });
               }}
@@ -463,6 +471,7 @@ export function RecordsScreen({ navigation }) {
             <TouchableOpacity
               style={styles.filterBtnPrimary}
               onPress={() => {
+                setSearch(searchInput.trim());
                 setLoading(true);
                 void load(1, { append: false });
               }}
@@ -474,16 +483,23 @@ export function RecordsScreen({ navigation }) {
       ) : null}
 
       <SearchField
-        value={search}
-        onChangeText={setSearch}
+        value={searchInput}
+        onChangeText={setSearchInput}
         placeholder="Record number, vendor…"
         onSubmit={() => {
+          setSearch(searchInput.trim());
           setLoading(true);
-          void load(1);
         }}
       />
       </ContentWidth>
-      {loading ? (
+      <ErrorBanner
+        message={loadError}
+        onRetry={() => {
+          setLoading(true);
+          void load(1, { append: false });
+        }}
+      />
+      {loading && !records.length ? (
         <LoadingBlock message="Loading records…" />
       ) : (
         <FlatList

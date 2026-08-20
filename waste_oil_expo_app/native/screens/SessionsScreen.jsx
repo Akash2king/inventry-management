@@ -31,7 +31,7 @@ import {
 } from "../components/ui/index.js";
 import { showConfirm, showError, showSuccess } from "../utils/feedback.js";
 
-function SessionCard({ session, type, revoking, onRevoke }) {
+function SessionCard({ session, type, revoking, disabled, onRevoke }) {
   const isCurrent = Boolean(session.is_current);
   const icon = clientIcon(session.client_kind);
 
@@ -85,11 +85,11 @@ function SessionCard({ session, type, revoking, onRevoke }) {
       {!isCurrent && onRevoke ? (
         <Pressable
           onPress={() => onRevoke(session)}
-          disabled={revoking}
+          disabled={revoking || disabled}
           style={({ pressed }) => [
             styles.revokeBtn,
-            pressed && !revoking ? styles.revokePressed : null,
-            revoking ? styles.revokeDisabled : null,
+            pressed && !revoking && !disabled ? styles.revokePressed : null,
+            revoking || disabled ? styles.revokeDisabled : null,
           ]}
           accessibilityRole="button"
           accessibilityLabel={`Sign out ${session.device_label || "device"}`}
@@ -194,12 +194,11 @@ export function SessionsScreen() {
         setBulkRevoking(true);
         try {
           const res = await api.auth.revokeAllOtherSessions();
-          if (!res.ok) {
+          if (res.data?.failed) {
+            showError(`Signed out ${res.data.revoked || 0} device(s); ${res.data.failed} could not be ended.`);
+          } else if (!res.ok) {
             showError(res.error || "Could not sign out other devices");
             return;
-          }
-          if (res.data?.failed) {
-            showError(`Signed out ${res.data.revoked} device(s); ${res.data.failed} could not be ended.`);
           } else {
             showSuccess(
               res.data?.revoked
@@ -292,6 +291,7 @@ export function SessionsScreen() {
               session={item}
               type={type}
               revoking={revokingId === item.id}
+              disabled={bulkRevoking || Boolean(revokingId)}
               onRevoke={handleRevoke}
             />
           )}

@@ -111,10 +111,19 @@ def apply_list_filters(qs, request):
         if al == WasteOilRecord.AlertLevel.COMPLETED:
             qs = qs.filter(alert_level=al)
         else:
-            # Other alert levels are derived from SLA percentage (entry_date → due_date).
-            # Filter using the model's computed_alert_level to ensure consistency with
-            # the dashboard and badges, then constrain the queryset by ids.
-            matching_ids = [r.id for r in qs if r.computed_alert_level == al]
+            # SLA bands match WasteOilRecord.computed_alert_level. Load only the
+            # fields needed for the property (avoids materializing full rows).
+            matching_ids = [
+                r.id
+                for r in qs.only(
+                    "id",
+                    "entry_date",
+                    "due_date",
+                    "is_locked",
+                    "alert_level",
+                ).iterator(chunk_size=500)
+                if r.computed_alert_level == al
+            ]
             qs = qs.filter(id__in=matching_ids)
     if dept := p.get("department_id"):
         qs = qs.filter(current_department_id=dept)
@@ -155,7 +164,7 @@ class WasteOilRecordListCreateView(ListCreateAPIView):
         qs = records_visible_to_user(self.request.user)
         qs = apply_list_filters(qs, self.request)
         if self.request.method == "GET":
-            qs = annotate_workflow_attention_queryset(qs)
+            qs = annotate_workflow_attention_queryset(qs, user=self.request.user)
         return qs.order_by("-created_at")
 
     def create(self, request, *args, **kwargs):
@@ -186,7 +195,7 @@ class WasteOilRecordDetailView(RetrieveUpdateAPIView):
 
     def get_queryset(self):
         qs = records_visible_to_user(self.request.user)
-        return annotate_workflow_attention_queryset(qs)
+        return annotate_workflow_attention_queryset(qs, user=self.request.user)
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()

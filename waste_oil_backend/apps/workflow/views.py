@@ -140,7 +140,8 @@ class WorkflowQueueView(APIView):
                 records_visible_to_user(user).filter(
                     current_stage=stage,
                     is_locked=False,
-                )
+                ),
+                user=user,
             )
             .annotate(_alert_rank=rank)
             .order_by("_alert_rank", "entry_date")

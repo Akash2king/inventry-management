@@ -90,9 +90,12 @@ scripts/platform-tools/
 # Never commit signing keys
 *.jks
 *.keystore
+ANDROID_KEYSTORE_BASE64.txt
+*keystore*.txt
 
 # Firebase / Google Cloud credentials (never commit)
 google-services.json
 credentials/
 **/*-firebase-adminsdk-*.json
 **/firebase-adminsdk*.json
+keystore/

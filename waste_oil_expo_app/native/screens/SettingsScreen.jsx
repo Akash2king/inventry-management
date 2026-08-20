@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Keyboard,
   Linking,
   Platform,
   StatusBar,
@@ -45,10 +46,12 @@ export function SettingsScreen({ navigation }) {
   const scrollStyle = useScrollContentStyle({ gap: 14, paddingTop: 0 });
   const [url, setUrl] = useState(apiBase || "");
   const [saving, setSaving] = useState(false);
+  const mustChange = Boolean(user?.must_change_password);
 
   async function handleSave() {
     setSaving(true);
     try {
+      Keyboard.dismiss();
       const trimmed = await saveApiBase(url);
       await applyApiBase(trimmed);
       showSuccess("API base URL updated.");
@@ -183,7 +186,7 @@ export function SettingsScreen({ navigation }) {
               />
             ) : null}
 
-            {user.role === "manager" || user.role === "gm" || user.role === "superadmin" ? (
+            {!mustChange && (user.role === "manager" || user.role === "gm" || user.role === "superadmin") ? (
               <ActionRow
                 icon="shield-checkmark-outline"
                 label="Audit logs"
@@ -192,7 +195,7 @@ export function SettingsScreen({ navigation }) {
               />
             ) : null}
 
-            {user.role === "gm" || user.role === "superadmin" ? (
+            {!mustChange && (user.role === "gm" || user.role === "superadmin") ? (
               <ActionRow
                 icon="construct-outline"
                 label="GM console"

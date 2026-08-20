@@ -1,0 +1,243 @@
+# Build Windows desktop (Tauri NSIS) + Android APK and attach both to one GitHub Release.
+#
+# Triggers:
+#   - push of version tags: v1.2.3
+#   - manual "Run workflow" (creates tag release-<run_number> assets as a draft-friendly release)
+#
+# Repo secrets (Actions → Secrets):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   GOOGLE_SERVICES_JSON  (full google-services.json file contents)
+#
+# Repo variables (optional):
+#   VITE_API_BASE_URL, EXPO_PUBLIC_API_BASE_URL
+#
+# Settings → Actions → General → Workflow permissions: Read and write.
+
+name: Release desktop + Android
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-clients-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  desktop-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: waste_oil_desktop-TAURI
+    env:
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://inventry-management-1.onrender.com/api/v1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: waste_oil_desktop-TAURI/src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri Windows installer
+        uses: tauri-apps/tauri-action@action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: waste_oil_desktop-TAURI
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('release-{0}', github.run_number) }}
+          releaseName: Chem-Solv Inventory ${{ github.ref_type == 'tag' && github.ref_name || format('build {0}', github.run_number) }}
+          releaseBody: |
+            Automated client builds from [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}).
+
+            - **Desktop:** Windows NSIS installer
+            - **Mobile:** Android APK (see assets from the Android job)
+
+            API URL baked into desktop: `${{ env.VITE_API_BASE_URL }}`
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
+
+  android-apk:
+    runs-on: ubuntu-latest
+    needs: []
+    defaults:
+      run:
+        working-directory: waste_oil_expo_app
+    env:
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || 'https://inventry-management-1.onrender.com/api/v1' }}
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "Missing secret GOOGLE_SERVICES_JSON" >&2
+            exit 1
+          fi
+          printf '%s\n' "$GOOGLE_SERVICES_JSON" > google-services.json
+          mkdir -p android/app
+          cp google-services.json android/app/google-services.json
+
+      - name: Expo prebuild (android/)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Patch Gradle for CI release signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          from pathlib import Path
+          import re
+
+          p = Path("android/app/build.gradle")
+          s = p.read_text(encoding="utf-8")
+
+          if "import java.util.Properties" not in s:
+            s = "import java.util.Properties\nimport java.io.FileInputStream\n\n" + s
+
+          m = re.search(r"^def jscFlavor = .*$", s, flags=re.M)
+          if "keystorePropertiesFile" not in s:
+            if not m:
+              raise SystemExit("Could not find jscFlavor line in android/app/build.gradle")
+            anchor_line = m.group(0)
+            insert = (
+              anchor_line
+              + "\n\n"
+              + "def keystorePropertiesFile = rootProject.file(\"keystore.properties\")\n"
+              + "def keystoreProperties = new Properties()\n"
+              + "def keystorePropertiesLoaded = false\n"
+              + "if (keystorePropertiesFile.exists()) {\n"
+              + "    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\n"
+              + "    keystorePropertiesLoaded = true\n"
+              + "} else if (\"true\".equalsIgnoreCase(System.getenv(\"CI\"))) {\n"
+              + "    throw new GradleException(\"Missing android/keystore.properties (required for CI release signing).\")\n"
+              + "}\n"
+            )
+            s = s.replace(anchor_line, insert, 1)
+
+          if "signingConfigs.release" not in s:
+            old = (
+              "    signingConfigs {\n"
+              "        debug {\n"
+              "            storeFile file('debug.keystore')\n"
+              "            storePassword 'android'\n"
+              "            keyAlias 'androiddebugkey'\n"
+              "            keyPassword 'android'\n"
+              "        }\n"
+              "    }\n"
+            )
+            if old in s:
+              new = (
+                "    signingConfigs {\n"
+                "        debug {\n"
+                "            storeFile file('debug.keystore')\n"
+                "            storePassword 'android'\n"
+                "            keyAlias 'androiddebugkey'\n"
+                "            keyPassword 'android'\n"
+                "        }\n"
+                "        release {\n"
+                "            if (keystorePropertiesLoaded) {\n"
+                "                storeFile file(keystoreProperties['storeFile'])\n"
+                "                storePassword keystoreProperties['storePassword']\n"
+                "                keyAlias keystoreProperties['keyAlias']\n"
+                "                keyPassword keystoreProperties['keyPassword']\n"
+                "            }\n"
+                "        }\n"
+                "    }\n"
+              )
+              s = s.replace(old, new, 1)
+
+          s = re.sub(
+            r"(release\s*\{[\s\S]*?\n)\s*signingConfig\s+signingConfigs\.debug(\s*\n)",
+            lambda m: m.group(1) + "            signingConfig keystorePropertiesLoaded ? signingConfigs.release : signingConfigs.debug" + m.group(2),
+            s,
+            count=1,
+          )
+
+          p.write_text(s, encoding="utf-8")
+          print("Patched", p)
+          PY
+
+      - name: Write Android keystore + signing props
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "Missing secret ANDROID_KEYSTORE_BASE64" >&2
+            exit 1
+          fi
+          mkdir -p android/app
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android/app/release.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=release.jks
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          EOF
+
+      - name: Build release APK
+        run: bash scripts/build-android-release-apk.sh
+
+      - name: Normalize APK name
+        id: apk
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME:-manual}"
+          SRC="android/app/build/outputs/apk/release/app-release.apk"
+          DEST="android/app/build/outputs/apk/release/Chem-Solv-Inventory-${TAG}.apk"
+          test -f "$SRC"
+          cp -f "$SRC" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chem-Solv-Inventory-${{ github.ref_name }}-apk
+          path: waste_oil_expo_app/${{ steps.apk.outputs.path }}
+
+      - name: Attach APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('release-{0}', github.run_number) }}
+          name: Chem-Solv Inventory ${{ github.ref_type == 'tag' && github.ref_name || format('build {0}', github.run_number) }}
+          files: waste_oil_expo_app/${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

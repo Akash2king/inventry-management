@@ -171,7 +171,7 @@ export function InAppNotificationsPage() {
           Record forwarding, returns, completions, SLA notices, welcomes, and monthly reports — same copy as email when
           applicable.{" "}
           <Link to="/sessions" style={{ fontWeight: 600 }}>
-            Signed-in devices (read-only)
+            Signed-in devices
           </Link>
         </p>
       </div>

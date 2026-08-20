@@ -22,6 +22,7 @@ export function LoginScreen({ navigation }) {
   const type = useResponsiveType();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleLogin() {
@@ -76,15 +77,25 @@ export function LoginScreen({ navigation }) {
             style={[styles.input, type.input, type.inputPad]}
           />
           <Text style={[styles.label, type.label]}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={Boolean(api)}
-            returnKeyType="go"
-            onSubmitEditing={() => void handleLogin()}
-            style={[styles.input, type.input, type.inputPad]}
-          />
+          <View style={styles.passwordWrap}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              editable={Boolean(api)}
+              returnKeyType="go"
+              onSubmitEditing={() => void handleLogin()}
+              style={[styles.input, styles.passwordInput, type.input, type.inputPad]}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPassword((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+            >
+              <Text style={styles.eyeText}>{showPassword ? "Hide" : "Show"}</Text>
+            </TouchableOpacity>
+          </View>
           <Button
             title="Sign in"
             onPress={() => void handleLogin()}
@@ -169,6 +180,27 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     color: theme.colors.textBright,
     backgroundColor: theme.colors.surface,
+  },
+  passwordWrap: {
+    position: "relative",
+    marginBottom: 14,
+  },
+  passwordInput: {
+    marginBottom: 0,
+    paddingRight: 64,
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  eyeText: {
+    color: theme.colors.accentHover,
+    fontWeight: "800",
+    fontSize: 13,
   },
   primary: {
     backgroundColor: theme.colors.accentHover,

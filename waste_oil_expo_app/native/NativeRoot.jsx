@@ -140,7 +140,13 @@ function AppStack() {
 
   return (
     <Stack.Navigator
-      key={isAuthenticated ? "signed-in" : "signed-out"}
+      key={
+        isAuthenticated
+          ? mustChange
+            ? "must-change"
+            : "signed-in"
+          : "signed-out"
+      }
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surfaceStrong },
         headerTintColor: theme.colors.textBright,
@@ -160,67 +166,60 @@ function AppStack() {
             options={{ title: "API Settings" }}
           />
         </>
+      ) : mustChange ? (
+        <>
+          <Stack.Screen
+            name="ChangePassword"
+            component={ChangePasswordScreen}
+            options={{ title: "Change password", headerBackVisible: false, gestureEnabled: false }}
+          />
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+          <Stack.Screen
+            name="Sessions"
+            component={SessionsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="InAppNotifications"
+            component={InAppNotificationsScreen}
+            options={{ title: "Workflow notifications" }}
+          />
+        </>
       ) : (
         <>
-          {mustChange ? (
-            <>
-              <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
-              <Stack.Screen
-                name="ChangePassword"
-                component={ChangePasswordScreen}
-                options={{ title: "Change password", headerBackVisible: false }}
-              />
-              <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
-              <Stack.Screen
-                name="Sessions"
-                component={SessionsScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="InAppNotifications"
-                component={InAppNotificationsScreen}
-                options={{ title: "Workflow notifications" }}
-              />
-            </>
-          ) : (
-            <>
-              <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
-              <Stack.Screen
-                name="ChangePassword"
-                component={ChangePasswordScreen}
-                options={{ title: "Change password" }}
-              />
-              <Stack.Screen
-                name="AuditLogs"
-                component={AuditLogsScreen}
-                options={{ title: "Audit logs" }}
-              />
-              <Stack.Screen
-                name="GmConsole"
-                component={GmConsoleScreen}
-                options={{ title: "GM console" }}
-              />
-              <Stack.Screen
-                name="Sessions"
-                component={SessionsScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="InAppNotifications"
-                component={InAppNotificationsScreen}
-                options={{ title: "Workflow notifications" }}
-              />
-            </>
-          )}
-          {!mustChange ? (
-            <Stack.Screen
-              name="RecordForm"
-              component={RecordFormScreen}
-              options={({ route }) => ({
-                title: route.params?.mode === "edit" ? "Edit record" : "New record",
-              })}
-            />
-          ) : null}
+          <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen
+            name="ChangePassword"
+            component={ChangePasswordScreen}
+            options={{ title: "Change password" }}
+          />
+          <Stack.Screen
+            name="AuditLogs"
+            component={AuditLogsScreen}
+            options={{ title: "Audit logs" }}
+          />
+          <Stack.Screen
+            name="GmConsole"
+            component={GmConsoleScreen}
+            options={{ title: "GM console" }}
+          />
+          <Stack.Screen
+            name="Sessions"
+            component={SessionsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="InAppNotifications"
+            component={InAppNotificationsScreen}
+            options={{ title: "Workflow notifications" }}
+          />
+          <Stack.Screen
+            name="RecordForm"
+            component={RecordFormScreen}
+            options={({ route }) => ({
+              title: route.params?.mode === "edit" ? "Edit record" : "New record",
+            })}
+          />
           <Stack.Screen
             name="RecordDetail"
             component={RecordDetailScreen}

@@ -113,7 +113,7 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.middleware.ReuseMiddlewareJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -177,6 +177,29 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "").strip()
 WELCOME_EMAIL_APP_HINT = os.environ.get("WELCOME_EMAIL_APP_HINT", "").strip()
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
+
+# Shared cache across Gunicorn workers when Redis is available; LocMem otherwise.
+_use_redis_cache = os.environ.get("DJANGO_REDIS_CACHE", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+if _use_redis_cache and REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": "wom",
+            "TIMEOUT": 300,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "wom-local",
+        }
+    }
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)

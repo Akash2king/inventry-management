@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useUiStore } from "../../../src/store/uiStore.js";
+import { useUiStore } from "../../store/uiStore.js";
 import { theme } from "../../theme.js";
 
 function ToastItem({ toast, onDismiss }) {

@@ -65,6 +65,10 @@ function createBrowserApi(baseUrl) {
             body: JSON.stringify({ refresh_token: refresh }),
           });
         } catch {
+          return "network_error";
+        }
+        if (!res.ok) {
+          if (res.status >= 500) return "server_error";
           return false;
         }
         const text = await res.text();
@@ -76,7 +80,7 @@ function createBrowserApi(baseUrl) {
             data = null;
           }
         }
-        if (!res.ok || !data?.access_token) {
+        if (!data?.access_token) {
           return false;
         }
         localStorage.setItem(LS_ACCESS, data.access_token);
@@ -92,6 +96,43 @@ function createBrowserApi(baseUrl) {
       }
     })();
     return _refreshPromise;
+  }
+
+  function clearAuthAndExpire() {
+    localStorage.removeItem(LS_ACCESS);
+    localStorage.removeItem(LS_REFRESH);
+    localStorage.removeItem(LS_SESSION);
+    window.dispatchEvent(new CustomEvent("wom:auth-expired"));
+  }
+
+  async function handleUnauthorizedRetry(path, authToken, options, retryFn) {
+    const p = path.replace(/^\//, "");
+    const canTryRefresh =
+      authToken &&
+      !options._didRefresh &&
+      !p.startsWith("auth/login") &&
+      !p.startsWith("auth/refresh") &&
+      !p.startsWith("auth/logout");
+    if (canTryRefresh) {
+      const refreshed = await tryRefreshAccess();
+      if (refreshed === true) {
+        return retryFn({ ...options, _didRefresh: true });
+      }
+      if (refreshed === "network_error" || refreshed === "server_error") {
+        return {
+          ok: false,
+          status: refreshed === "network_error" ? 0 : 500,
+          error:
+            refreshed === "network_error"
+              ? "Network error during token refresh. Check connection."
+              : "Server error during token refresh.",
+        };
+      }
+    }
+    if (authToken) {
+      clearAuthAndExpire();
+    }
+    return null;
   }
 
   async function request(method, path, options = {}) {
@@ -171,18 +212,25 @@ function createBrowserApi(baseUrl) {
         !p.startsWith("auth/logout");
       if (canTryRefresh) {
         const refreshed = await tryRefreshAccess();
-        if (refreshed) {
+        if (refreshed === true) {
           // Drop caller-supplied token so the retry uses the new access_token from localStorage.
           const retryOpts = { ...options, _didRefresh: true };
           delete retryOpts.token;
           return request(method, path, retryOpts);
         }
+        if (refreshed === "network_error" || refreshed === "server_error") {
+          return {
+            ok: false,
+            status: refreshed === "network_error" ? 0 : 500,
+            error:
+              refreshed === "network_error"
+                ? "Network error during token refresh. Check connection."
+                : "Server error during token refresh.",
+          };
+        }
       }
       if (!skipAuth && authToken) {
-        localStorage.removeItem(LS_ACCESS);
-        localStorage.removeItem(LS_REFRESH);
-        localStorage.removeItem(LS_SESSION);
-        window.dispatchEvent(new CustomEvent("wom:auth-expired"));
+        clearAuthAndExpire();
       }
       return {
         ok: false,
@@ -204,7 +252,7 @@ function createBrowserApi(baseUrl) {
   }
 
   /** GET binary PDF (or other non-JSON) with JWT; returns Uint8Array + filename from Content-Disposition. */
-  async function requestPdfGet(path, tokenArg) {
+  async function requestPdfGet(path, tokenArg, options = {}) {
     const url = `${base}/${path.replace(/^\//, "")}`;
     const headers = {};
     const authToken =
@@ -230,12 +278,10 @@ function createBrowserApi(baseUrl) {
       };
     }
     if (res.status === 401) {
-      if (authToken) {
-        localStorage.removeItem(LS_ACCESS);
-        localStorage.removeItem(LS_REFRESH);
-        localStorage.removeItem(LS_SESSION);
-        window.dispatchEvent(new CustomEvent("wom:auth-expired"));
-      }
+      const retry = await handleUnauthorizedRetry(path, authToken, options, () =>
+        requestPdfGet(path, undefined, { _didRefresh: true }),
+      );
+      if (retry) return retry;
       const text = await res.text();
       let data = null;
       try {
@@ -281,7 +327,7 @@ function createBrowserApi(baseUrl) {
   }
 
   /** GET image or other binary body with JWT; returns Blob. */
-  async function requestBlobGet(path, tokenArg) {
+  async function requestBlobGet(path, tokenArg, options = {}) {
     const url = `${base}/${path.replace(/^\//, "")}`;
     const headers = {};
     const authToken =
@@ -307,12 +353,10 @@ function createBrowserApi(baseUrl) {
       };
     }
     if (res.status === 401) {
-      if (authToken) {
-        localStorage.removeItem(LS_ACCESS);
-        localStorage.removeItem(LS_REFRESH);
-        localStorage.removeItem(LS_SESSION);
-        window.dispatchEvent(new CustomEvent("wom:auth-expired"));
-      }
+      const retry = await handleUnauthorizedRetry(path, authToken, options, () =>
+        requestBlobGet(path, undefined, { _didRefresh: true }),
+      );
+      if (retry) return retry;
       const text = await res.text();
       let data = null;
       try {
@@ -394,6 +438,27 @@ function createBrowserApi(baseUrl) {
       },
       revokeSession: async (id, tokenArg) =>
         request("DELETE", `auth/sessions/${id}/`, { token: tokenArg }),
+      revokeAllOtherSessions: async (tokenArg) => {
+        const listRes = await request("GET", "auth/sessions/?active=1", { token: tokenArg });
+        if (!listRes.ok) return listRes;
+        const sessions = Array.isArray(listRes.data?.results) ? listRes.data.results : [];
+        const others = sessions.filter((s) => !s.is_current);
+        if (!others.length) {
+          return { ok: true, status: 200, data: { revoked: 0, failed: 0 } };
+        }
+        let revoked = 0;
+        let failed = 0;
+        for (const session of others) {
+          const res = await request("DELETE", `auth/sessions/${session.id}/`, { token: tokenArg });
+          if (res.ok) revoked += 1;
+          else failed += 1;
+        }
+        return {
+          ok: true,
+          status: failed ? 207 : 200,
+          data: { revoked, failed },
+        };
+      },
       me: async (tokenArg) => {
         const t =
           tokenArg !== undefined && tokenArg !== null && tokenArg !== ""

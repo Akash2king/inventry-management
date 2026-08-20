@@ -72,6 +72,9 @@ def _cached_viewer_forward(serializer, obj):
         return None
     if obj.current_holder_id and str(obj.current_holder_id) == str(user.id):
         return None
+    # Fast path when queryset was annotated by annotate_workflow_attention_queryset.
+    if hasattr(obj, "_viewer_has_forward"):
+        return True if obj._viewer_has_forward else None
     cache = serializer.context.setdefault("_viewer_forward_cache", {})
     pk = obj.pk
     if pk not in cache:

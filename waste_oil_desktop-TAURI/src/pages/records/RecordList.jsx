@@ -292,7 +292,23 @@ export function RecordList() {
       </div>
 
       <div className="table-wrap table-wrap--raised" style={{ marginTop: "1rem" }}>
-        <table className="data-table">
+        {storeError && records.length > 0 ? (
+          <div
+            className="login-error"
+            role="alert"
+            style={{ margin: "0 0 0.75rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}
+          >
+            <span>Could not refresh records: {storeError}</span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => fetchAll({ page: 1, page_size: PAGE_SIZE }).catch(() => {})}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        <table className="data-table" style={isLoading && records.length ? { opacity: 0.72 } : undefined}>
           <thead>
             <tr>
               <th>Photo</th>
@@ -314,7 +330,7 @@ export function RecordList() {
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
+            {isLoading && !records.length ? (
               <tr>
                 <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
                   <div className="spinner" style={{ margin: "0 auto" }} />
@@ -339,7 +355,7 @@ export function RecordList() {
               ) : (
                 <tr>
                   <td colSpan={14} style={{ textAlign: "center", padding: "2rem" }}>
-                    No records
+                    No records match these filters.
                   </td>
                 </tr>
               )

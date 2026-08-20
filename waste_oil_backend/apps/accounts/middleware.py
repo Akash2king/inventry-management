@@ -38,6 +38,7 @@ def _password_flow_exempt_path(path: str) -> bool:
         return True
     return False
 
+
 # Under /api/v1/records/ these subpaths are workflow actions (not browse-only).
 _RECORDS_ACTION_MARKERS = ("/forward/", "/return/", "/forward-candidates/")
 
@@ -60,18 +61,41 @@ def _allowed_read_only_while_must_change_password(request, path: str) -> bool:
     return False
 
 
+_jwt_auth = JWTAuthentication()
+
+
 def _attach_user_from_jwt(request):
+    """Authenticate once and mark so DRF JWTAuthentication can reuse request.user."""
     auth = request.META.get("HTTP_AUTHORIZATION", "")
     if not auth.startswith("Bearer "):
         return
+    if getattr(request, "user", None) is not None and getattr(
+        request.user, "is_authenticated", False
+    ):
+        request._force_auth_user = request.user
+        return
     drf_request = Request(request)
-    jwt_auth = JWTAuthentication()
     try:
-        pair = jwt_auth.authenticate(drf_request)
+        pair = _jwt_auth.authenticate(drf_request)
         if pair:
             request.user = pair[0]
+            request._force_auth_user = pair[0]
+            request._force_auth_token = pair[1]
     except Exception:
         pass
+
+
+class ReuseMiddlewareJWTAuthentication(JWTAuthentication):
+    """Skip a second DB user load when middleware already authenticated the JWT."""
+
+    def authenticate(self, request):
+        forced = getattr(request._request, "_force_auth_user", None) if hasattr(request, "_request") else None
+        if forced is None:
+            forced = getattr(request, "_force_auth_user", None)
+        if forced is not None and getattr(forced, "is_authenticated", False):
+            token = getattr(getattr(request, "_request", request), "_force_auth_token", None)
+            return (forced, token)
+        return super().authenticate(request)
 
 
 class ForcePasswordChangeMiddleware:

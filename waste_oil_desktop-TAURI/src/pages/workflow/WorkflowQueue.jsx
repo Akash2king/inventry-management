@@ -32,6 +32,7 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
   const fetchQueue = useWorkflowStore((s) => s.fetchQueue);
   const queue = useWorkflowStore((s) => s.queue);
   const isLoading = useWorkflowStore((s) => s.isLoading);
+  const isRefreshing = useWorkflowStore((s) => s.isRefreshing);
   const storeError = useWorkflowStore((s) => s.error);
   const [fwd, setFwd] = useState(null);
   const [ret, setRet] = useState(null);
@@ -43,11 +44,11 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
   useEffect(() => {
     const id = setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      fetchQueue().catch(() => {});
+      fetchQueue({ quiet: true }).catch(() => {});
     }, 20000);
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        fetchQueue().catch(() => {});
+        fetchQueue({ quiet: true }).catch(() => {});
       }
     };
     document.addEventListener("visibilitychange", onVis);
@@ -59,9 +60,16 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
 
   return (
     <div>
-      <h2 style={{ color: "var(--clr-text-bright)", marginTop: 0 }}>{title}</h2>
+      <h2 style={{ color: "var(--clr-text-bright)", marginTop: 0 }}>
+        {title}
+        {isRefreshing ? (
+          <span style={{ marginLeft: "0.75rem", fontSize: "0.8rem", fontWeight: 500, opacity: 0.65 }}>
+            Updating…
+          </span>
+        ) : null}
+      </h2>
       <StageAckBanner user={user} />
-      {isLoading ? (
+      {isLoading && !queue.length ? (
         <div className="fullscreen-center" style={{ minHeight: 120 }}>
           <div className="spinner" />
         </div>

@@ -101,6 +101,9 @@ class WasteOilRecord(models.Model):
             models.Index(fields=["created_at"]),
             models.Index(fields=["entry_date"]),
             models.Index(fields=["due_date"]),
+            models.Index(fields=["current_stage", "is_locked"]),
+            models.Index(fields=["current_holder", "alert_level"]),
+            models.Index(fields=["current_department", "-created_at"]),
         ]
 
     def __str__(self):

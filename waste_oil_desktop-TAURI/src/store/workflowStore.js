@@ -10,15 +10,28 @@ export const useWorkflowStore = create((set, get) => ({
   queue: [],
   transitions: [],
   isLoading: false,
+  isRefreshing: false,
   error: null,
 
-  fetchQueue: async () => {
-    set({ isLoading: true, error: null });
+  /**
+   * @param {{ quiet?: boolean }} [opts] - quiet=true skips full-page spinner (used by poll).
+   */
+  fetchQueue: async (opts = {}) => {
+    const quiet = Boolean(opts.quiet) && get().queue.length > 0;
+    if (quiet) {
+      set({ isRefreshing: true, error: null });
+    } else {
+      set({ isLoading: true, error: null });
+    }
     try {
       const data = await workflowApi.getQueue(token());
-      set({ queue: Array.isArray(data) ? data : [], isLoading: false });
+      set({
+        queue: Array.isArray(data) ? data : [],
+        isLoading: false,
+        isRefreshing: false,
+      });
     } catch (e) {
-      set({ error: e.message, isLoading: false });
+      set({ error: e.message, isLoading: false, isRefreshing: false });
       throw e;
     }
   },

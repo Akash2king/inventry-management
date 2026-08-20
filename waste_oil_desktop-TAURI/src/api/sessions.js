@@ -7,3 +7,7 @@ export function listSessions(active, token) {
 export function revokeSession(id, token) {
   return unwrap(window.api.auth.revokeSession(id, token));
 }
+
+export function revokeAllOtherSessions(token) {
+  return unwrap(window.api.auth.revokeAllOtherSessions(token));
+}

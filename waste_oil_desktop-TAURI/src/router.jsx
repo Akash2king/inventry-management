@@ -128,6 +128,11 @@ function RootShell() {
     if (!window.api?.onAuthExpired) return undefined;
     const off = window.api.onAuthExpired(() => {
       logout().catch(() => {});
+      try {
+        useUiStore.getState().showToast("Your session ended. Please sign in again.", "error");
+      } catch {
+        /* ignore */
+      }
       navigate("/login", { replace: true });
     });
     return off;

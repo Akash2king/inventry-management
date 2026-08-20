@@ -137,9 +137,11 @@ export function ChangePasswordScreen({ navigation }) {
               </TouchableOpacity>
             ) : null}
 
-            <TouchableOpacity style={styles.btnGhost} onPress={() => void onSignOut()}>
-              <Text style={styles.btnGhostText}>Sign out</Text>
-            </TouchableOpacity>
+            {!mustChange ? (
+              <TouchableOpacity style={styles.btnGhost} onPress={() => void onSignOut()}>
+                <Text style={styles.btnGhostText}>Sign out</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <Text style={[styles.foot, type.caption]}>

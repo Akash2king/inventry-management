@@ -9,12 +9,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../AuthContext.jsx";
-import { STAGE_LABELS } from "../../src/utils/stageLabels.js";
-import { canActForward, canActReturn, stageForRole } from "../../src/utils/permissions.js";
+import { STAGE_LABELS } from "../utils/stageLabels.js";
+import { canActForward, canActReturn, stageForRole } from "../utils/permissions.js";
 import { theme } from "../theme.js";
 import { Card, IconButton, SectionHeader, ErrorBanner, EmptyState, LoadingBlock, QueueListCard } from "../components/ui/index.js";
 import { FLATLIST_PERF } from "../utils/listPerf.js";
-import { formatDate, formatQty, slaTotalDays } from "../../src/utils/formatters.js";
+import { formatDate, formatQty, slaTotalDays } from "../utils/formatters.js";
 import { useResponsive } from "../utils/responsive.js";
 import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 

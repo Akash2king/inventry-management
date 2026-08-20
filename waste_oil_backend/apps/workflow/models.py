@@ -71,6 +71,7 @@ class StageTransition(models.Model):
             models.Index(fields=["record"]),
             models.Index(fields=["timestamp"]),
             models.Index(fields=["record", "sequence"]),
+            models.Index(fields=["transitioned_by", "transition_type", "record"]),
         ]
 
     def __str__(self):

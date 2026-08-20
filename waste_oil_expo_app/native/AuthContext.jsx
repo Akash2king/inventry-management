@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { ActivityIndicator, AppState, Platform, StyleSheet, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { createNativeApi } from "./nativeApi.js";
 import { loadSavedApiBase } from "./apiConfig.js";
@@ -124,7 +125,15 @@ export function AuthProvider({ children }) {
       }
       showError("Your password must be changed before proceeding.");
       if (navigationRef.isReady()) {
-        navigationRef.navigate("ChangePassword");
+        // Stack remounts to must-change when user flag flips; force ChangePassword if still on old tree.
+        try {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: "ChangePassword" }],
+          });
+        } catch {
+          navigationRef.navigate("ChangePassword");
+        }
       }
     });
   }, [api]);
@@ -144,11 +153,33 @@ export function AuthProvider({ children }) {
     setApiBase(b);
     setError("");
     if (!b) {
+      try {
+        await AsyncStorage.multiRemove([
+          "wom_access_token",
+          "wom_refresh_token",
+          "wom_user_profile",
+          "wom_session_id",
+        ]);
+      } catch {
+        /* ignore */
+      }
       setApi(null);
       setUser(null);
       return;
     }
     try {
+      // Changing servers must not reuse another environment's tokens.
+      try {
+        await AsyncStorage.multiRemove([
+          "wom_access_token",
+          "wom_refresh_token",
+          "wom_user_profile",
+          "wom_session_id",
+        ]);
+      } catch {
+        /* ignore */
+      }
+      setUser(null);
       const instance = createNativeApi(b);
       setApi(instance);
       const me = await instance.auth.me();
