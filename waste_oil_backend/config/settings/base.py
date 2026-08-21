@@ -79,9 +79,12 @@ TEMPLATES = [
 # Local Postgres (no SSL):  postgres://user:pass@127.0.0.1:5432/dbname?sslmode=disable
 #   If the password contains @, URL-encode it as %40 (e.g. root@123 → root%40123).
 # Cloud Postgres (Aiven):   postgres://user:pass@host:port/defaultdb?sslmode=require
-# Omit DATABASE_URL entirely to use SQLite (db.sqlite3) for local dev only.
+# Omit DATABASE_URL (or leave blank) to use SQLite (db.sqlite3) for local dev only.
 _database_url = os.environ.get("DATABASE_URL", "").strip()
 _sqlite_default = "sqlite:///" + str(BASE_DIR / "db.sqlite3")
+# Empty DATABASE_URL= in .env must not stay set — dj-database-url treats "" as invalid.
+if not _database_url:
+    os.environ.pop("DATABASE_URL", None)
 _use_postgres = _database_url.startswith(("postgres://", "postgresql://"))
 
 
@@ -221,6 +224,7 @@ WELCOME_EMAIL_APP_HINT = os.environ.get("WELCOME_EMAIL_APP_HINT", "").strip()
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 
 # Shared cache across Gunicorn workers when Redis is available; LocMem otherwise.
+# Production default: Redis. Dev (config.settings.dev) forces LocMem unless DJANGO_REDIS_CACHE=1.
 _use_redis_cache = os.environ.get("DJANGO_REDIS_CACHE", "true").lower() in (
     "1",
     "true",

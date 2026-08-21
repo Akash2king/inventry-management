@@ -73,7 +73,8 @@ jobs:
 
   android-apk:
     runs-on: ubuntu-latest
-    needs: []
+    # Wait for desktop so one release exists before attaching the APK (avoids tag race).
+    needs: [desktop-windows]
     defaults:
       run:
         working-directory: waste_oil_expo_app
@@ -87,6 +88,10 @@ jobs:
         with:
           node-version: "20"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -96,6 +101,17 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Check Google Services secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "Missing secret GOOGLE_SERVICES_JSON (full google-services.json contents)." >&2
+            exit 1
+          fi
+          echo "GOOGLE_SERVICES_JSON is set (${#GOOGLE_SERVICES_JSON} chars)"
 
       - name: Generate native Android project (expo prebuild)
         env:

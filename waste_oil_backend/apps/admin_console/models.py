@@ -30,24 +30,37 @@ class SystemConfig(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        cache.delete(f"{self.CACHE_KEY_PREFIX}{self.key}")
+        try:
+            cache.delete(f"{self.CACHE_KEY_PREFIX}{self.key}")
+        except Exception:
+            pass
 
     def delete(self, *args, **kwargs):
         k = self.key
         super().delete(*args, **kwargs)
-        cache.delete(f"{self.CACHE_KEY_PREFIX}{k}")
+        try:
+            cache.delete(f"{self.CACHE_KEY_PREFIX}{k}")
+        except Exception:
+            pass
 
     @classmethod
     def get_value(cls, key, default=None, cast=str):
         ck = f"{cls.CACHE_KEY_PREFIX}{key}"
-        raw = cache.get(ck)
+        raw = None
+        try:
+            raw = cache.get(ck)
+        except Exception:
+            raw = None
         if raw is None:
             try:
                 row = cls.objects.only("value").get(pk=key)
                 raw = row.value
             except cls.DoesNotExist:
                 return default
-            cache.set(ck, raw, timeout=cls.CACHE_TIMEOUT)
+            try:
+                cache.set(ck, raw, timeout=cls.CACHE_TIMEOUT)
+            except Exception:
+                pass
 
         if cast is bool:
             return str(raw).lower() in ("1", "true", "yes", "on")

@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
 import { theme } from "../theme.js";
-import { EmptyState, FadeIn, LoadingBlock } from "../components/ui/index.js";
+import { EmptyState, ErrorBanner, FadeIn, LoadingBlock } from "../components/ui/index.js";
 import { useResponsive } from "../utils/responsive.js";
 
 function formatTs(isoTs) {
@@ -44,17 +44,26 @@ export function WorkflowTimelineScreen({ route }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
     if (!api || !recordId) return;
-    const tr = await api.workflow.getTransitions(recordId);
-    if (tr.ok && Array.isArray(tr.data)) {
-      setRows(tr.data.slice(0).reverse());
-    } else {
+    try {
+      const tr = await api.workflow.getTransitions(recordId);
+      if (tr.ok && Array.isArray(tr.data)) {
+        setRows(tr.data.slice(0).reverse());
+        setLoadError("");
+      } else {
+        setRows([]);
+        setLoadError(tr.error || "Could not load workflow history.");
+      }
+    } catch (e) {
       setRows([]);
+      setLoadError(e?.message || "Could not load workflow history.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
-    setRefreshing(false);
   }, [api, recordId]);
 
   useEffect(() => {
@@ -100,12 +109,23 @@ export function WorkflowTimelineScreen({ route }) {
             </View>
           </FadeIn>
         )}
-        ListEmptyComponent={
-          <EmptyState
-            icon="git-branch-outline"
-            title="No workflow history"
-            message="Transitions will appear here after the record moves through the pipeline."
+        ListHeaderComponent={
+          <ErrorBanner
+            message={loadError}
+            onRetry={() => {
+              setLoading(true);
+              void load();
+            }}
           />
+        }
+        ListEmptyComponent={
+          loadError ? null : (
+            <EmptyState
+              icon="git-branch-outline"
+              title="No workflow history"
+              message="Transitions will appear here after the record moves through the pipeline."
+            />
+          )
         }
         contentContainerStyle={[
           rows.length === 0 ? styles.emptyWrap : styles.listPad,

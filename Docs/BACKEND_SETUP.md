@@ -132,7 +132,10 @@ start-backend.bat --install-only
 | `--install-only` | Create `.venv` + install packages, then exit |
 | `--run-only` | Skip `pip install`; still migrate + run |
 | `--no-migrate` | Skip migrations |
-| `--seed` | Run `seed_test_data` after migrate |
+| `--seed` | Always seed demo data after migrate (skip y/n prompt) |
+| `--no-seed` | Never seed (skip y/n prompt) |
+
+With no `--seed` / `--no-seed`, the interactive run asks **Seed demo data (seed_test_data)? [y/N]** after DB and bind prompts.
 
 CI / automation example:
 

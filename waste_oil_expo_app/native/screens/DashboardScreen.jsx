@@ -16,7 +16,7 @@ import { STAGE_LABELS } from "../utils/stageLabels.js";
 import { stageForRole } from "../utils/permissions.js";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../theme.js";
-import { Badge, Card, LoadingBlock, SegmentedControl, SectionHeader, StatCard } from "../components/ui/index.js";
+import { Badge, Card, ErrorBanner, LoadingBlock, SegmentedControl, SectionHeader, StatCard } from "../components/ui/index.js";
 import { FLATLIST_PERF } from "../utils/listPerf.js";
 import { showSuccess, showError } from "../utils/feedback.js";
 import { useResponsive } from "../utils/responsive.js";
@@ -71,6 +71,7 @@ export function DashboardScreen({ navigation }) {
   const { horizontalPad, contentMaxWidth, kpiColumns, listColumns, gridGap } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [view, setView] = useState("overview"); // overview | analytics
   const [slice, setSlice] = useState("default"); // default | dueSoon | overdue | queue | completed | loaded
   const [queue, setQueue] = useState([]);
@@ -88,20 +89,33 @@ export function DashboardScreen({ navigation }) {
       ...(peer ? { exclude_completed: true } : {}),
       ...(peer && myStage != null ? { stage: myStage } : {}),
     };
-    const [q, r] = await Promise.all([
-      api.workflow.getQueue(),
-      api.records.getAll(recordFilters),
-    ]);
-    if (q.ok && Array.isArray(q.data)) setQueue(q.data);
-    else setQueue([]);
-    if (r.ok) {
-      const list = Array.isArray(r.data?.results) ? r.data.results : [];
-      setRecords(list);
-    } else {
+    try {
+      const [q, r] = await Promise.all([
+        api.workflow.getQueue(),
+        api.records.getAll(recordFilters),
+      ]);
+      const errors = [];
+      if (q.ok && Array.isArray(q.data)) setQueue(q.data);
+      else {
+        setQueue([]);
+        if (!q.ok) errors.push(q.error || "Could not load queue");
+      }
+      if (r.ok) {
+        const list = Array.isArray(r.data?.results) ? r.data.results : [];
+        setRecords(list);
+      } else {
+        setRecords([]);
+        errors.push(r.error || "Could not load records");
+      }
+      setLoadError(errors.join(" · "));
+    } catch (e) {
+      setQueue([]);
       setRecords([]);
+      setLoadError(e?.message || "Could not load dashboard");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
-    setRefreshing(false);
   }, [api, peer, myStage]);
 
   useEffect(() => {
@@ -372,6 +386,13 @@ export function DashboardScreen({ navigation }) {
         {...FLATLIST_PERF}
         ListHeaderComponent={
           <ContentWidth noPad>
+            <ErrorBanner
+              message={loadError}
+              onRetry={() => {
+                setLoading(true);
+                void load();
+              }}
+            />
             <View style={[styles.headerWrap, { paddingHorizontal: horizontalPad }]}>
               <Card style={styles.headerCard} padded={false}>
                 <View style={styles.headerInner}>

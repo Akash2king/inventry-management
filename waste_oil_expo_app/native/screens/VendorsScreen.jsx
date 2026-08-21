@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../AuthContext.jsx";
 import { theme } from "../theme.js";
-import { Button, EmptyState, KeyboardAwareScroll, LoadingBlock, ModalHeader, ModalShell, PageHeader } from "../components/ui/index.js";
+import { Button, EmptyState, ErrorBanner, KeyboardAwareScroll, LoadingBlock, ModalHeader, ModalShell, PageHeader } from "../components/ui/index.js";
 import { useResponsiveType } from "../utils/typography.js";
 import { FLATLIST_PERF } from "../utils/listPerf.js";
 import { showSuccess, showError, showConfirm } from "../utils/feedback.js";
@@ -31,6 +31,7 @@ export function VendorsScreen() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -42,15 +43,23 @@ export function VendorsScreen() {
 
   const load = useCallback(async () => {
     if (!api) return;
-    const res = await api.vendors.list();
-    if (res.ok) {
-      const list = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.results) ? res.data.results : [];
-      setRows(list);
-    } else {
+    try {
+      const res = await api.vendors.list();
+      if (res.ok) {
+        const list = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.results) ? res.data.results : [];
+        setRows(list);
+        setLoadError("");
+      } else {
+        setRows([]);
+        setLoadError(res.error || "Could not load vendors.");
+      }
+    } catch (e) {
       setRows([]);
+      setLoadError(e?.message || "Could not load vendors.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
-    setRefreshing(false);
   }, [api]);
 
   useEffect(() => {
@@ -165,6 +174,15 @@ export function VendorsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
           }
           {...FLATLIST_PERF}
+          ListHeaderComponent={
+            <ErrorBanner
+              message={loadError}
+              onRetry={() => {
+                setLoading(true);
+                void load();
+              }}
+            />
+          }
           renderItem={({ item }) => (
             <View style={[styles.row, listColumns > 1 && styles.rowGrid]}>
               <TouchableOpacity style={{ flex: 1 }} onPress={() => (canManage ? openEdit(item) : null)} disabled={!canManage}>
@@ -186,11 +204,13 @@ export function VendorsScreen() {
             </View>
           )}
           ListEmptyComponent={
-            <EmptyState
-              icon="business-outline"
-              title="No vendors yet"
-              message={canManage ? "Tap Add to create your first vendor." : "Pull to refresh."}
-            />
+            loadError ? null : (
+              <EmptyState
+                icon="business-outline"
+                title="No vendors yet"
+                message={canManage ? "Tap Add to create your first vendor." : "Pull to refresh."}
+              />
+            )
           }
           contentContainerStyle={[
             rows.length === 0 ? styles.emptyWrap : styles.listPad,

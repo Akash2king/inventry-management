@@ -39,11 +39,28 @@ module.exports = () => {
     process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID ??
     appJson.expo.extra?.oneSignalAppId ??
     "e744024a-08b5-4703-a3ed-af0ac17e907f";
+  const apiBaseUrl = (
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    ""
+  ).trim();
+  const oneSignalMode =
+    process.env.ONESIGNAL_MODE ||
+    (process.env.EAS_BUILD_PROFILE === "production" || process.env.CI === "true"
+      ? "production"
+      : "development");
+
+  const plugins = (appJson.expo.plugins || []).map((plugin) => {
+    if (Array.isArray(plugin) && plugin[0] === "onesignal-expo-plugin") {
+      return ["onesignal-expo-plugin", { ...(plugin[1] || {}), mode: oneSignalMode }];
+    }
+    return plugin;
+  });
 
   return {
     ...appJson,
     expo: {
       ...appJson.expo,
+      plugins,
       android: {
         ...appJson.expo.android,
         googleServicesFile,
@@ -51,6 +68,7 @@ module.exports = () => {
       extra: {
         ...appJson.expo.extra,
         oneSignalAppId,
+        EXPO_PUBLIC_API_BASE_URL: apiBaseUrl,
       },
     },
   };

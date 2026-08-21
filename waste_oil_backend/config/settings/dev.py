@@ -13,6 +13,22 @@ if not _use_redis_celery:
     CELERY_BROKER_URL = "memory://"
     CELERY_RESULT_BACKEND = "cache+memory://"
 
+# Cache without Redis (local dev): LocMem so APIs work when Redis is not running.
+# Session last-seen, SystemConfig, etc. use django.core.cache — RedisCache raises
+# ConnectionError (WinError 10061) if redis-server is down. Opt in with DJANGO_REDIS_CACHE=1.
+_force_redis_cache = os.environ.get("DJANGO_REDIS_CACHE", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+if not _force_redis_cache:
+    CACHES = {  # noqa: F405 — override base RedisCache
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "wom-dev-local",
+        }
+    }
+
 # Optional: django-debug-toolbar (only if installed)
 try:
     import debug_toolbar  # noqa: F401

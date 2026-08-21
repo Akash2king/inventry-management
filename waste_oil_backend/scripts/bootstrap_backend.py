@@ -7,6 +7,7 @@ Usage:
   python scripts/bootstrap_backend.py local
   python scripts/bootstrap_backend.py cloud 0.0.0.0:8000
   python scripts/bootstrap_backend.py --db=sqlite --seed
+  python scripts/bootstrap_backend.py --no-seed
   python scripts/bootstrap_backend.py --install-only
   python scripts/bootstrap_backend.py --run-only local
 
@@ -139,6 +140,15 @@ def _prompt_hostport(default: str = "0.0.0.0:8000") -> str:
     return raw or default
 
 
+def _prompt_seed(default: bool = False) -> bool:
+    print()
+    hint = "Y/n" if default else "y/N"
+    raw = input(f"Seed demo data (seed_test_data)? [{hint}]: ").strip().lower()
+    if not raw:
+        return default
+    return raw in ("y", "yes", "1", "true")
+
+
 def _redact(url: str) -> str:
     if not url:
         return "(empty → SQLite db.sqlite3)"
@@ -158,9 +168,13 @@ def _apply_database(profile: str) -> str:
     url = resolve(profile)
     if profile.strip().lower() in ("sqlite", "sql"):
         url = ""
-    os.environ["DATABASE_URL"] = url
+    # dj-database-url treats an empty DATABASE_URL env as "configured but blank"
+    # (dummy engine). Unset for SQLite so Django falls back to db.sqlite3.
+    if url:
+        os.environ["DATABASE_URL"] = url
+    else:
+        os.environ.pop("DATABASE_URL", None)
     return url
-
 
 def _django_env() -> dict[str, str]:
     env = os.environ.copy()
@@ -190,7 +204,11 @@ def _seed() -> None:
             _run([str(_venv_python()), str(seed_py)], env=_django_env())
         else:
             print("Seed skipped (seed_test_data not available).")
-
+            return
+    print()
+    print("Demo logins (password Demo12345 unless you passed --password):")
+    print("  storeman | treatment | waste_admin | manager | gm")
+    print()
 
 def _check() -> None:
     _run(
@@ -242,7 +260,12 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument(
         "--seed",
         action="store_true",
-        help="Run seed_test_data after migrate",
+        help="Run seed_test_data after migrate (skip prompt)",
+    )
+    p.add_argument(
+        "--no-seed",
+        action="store_true",
+        help="Skip seeding without prompting",
     )
     p.add_argument(
         "--yes",
@@ -299,21 +322,38 @@ def main(argv: list[str] | None = None) -> None:
             print("No TTY — using sqlite")
 
     hostport = args.hostport or "0.0.0.0:8000"
-    if not args.hostport and not args.yes and not args.no_menu and sys.stdin.isatty():
+    interactive = not args.yes and not args.no_menu and sys.stdin.isatty()
+    if not args.hostport and interactive:
         try:
             hostport = _prompt_hostport(hostport)
         except EOFError:
             pass
 
+    if args.seed and args.no_seed:
+        raise SystemExit("Use only one of --seed or --no-seed")
+    if args.seed:
+        do_seed = True
+    elif args.no_seed or args.yes or args.no_menu:
+        do_seed = False
+    elif interactive:
+        try:
+            do_seed = _prompt_seed(False)
+        except EOFError:
+            do_seed = False
+    else:
+        do_seed = False
+
     url = _apply_database(profile)
     print()
     print(f"Database profile: {profile}")
     print(f"  {_redact(url)}")
+    print(f"Seed demo data: {'yes' if do_seed else 'no'}")
 
     if not args.no_migrate:
         _migrate()
     _check()
-    if args.seed:
+
+    if do_seed:
         _seed()
 
     _runserver(hostport, args.extra)

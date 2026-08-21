@@ -131,17 +131,28 @@ export function ChangePasswordScreen({ navigation }) {
               disabled={!canSubmit || busy}
             />
 
-            {!mustChange ? (
-              <TouchableOpacity style={styles.btnGhost} onPress={() => navigation.goBack()}>
-                <Text style={styles.btnGhostText}>Cancel</Text>
-              </TouchableOpacity>
-            ) : null}
-
-            {!mustChange ? (
-              <TouchableOpacity style={styles.btnGhost} onPress={() => void onSignOut()}>
-                <Text style={styles.btnGhostText}>Sign out</Text>
-              </TouchableOpacity>
-            ) : null}
+            {mustChange ? (
+              <>
+                <TouchableOpacity
+                  style={styles.btnGhost}
+                  onPress={() => navigation.navigate("Settings")}
+                >
+                  <Text style={styles.btnGhostText}>API Settings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnGhost} onPress={() => void onSignOut()}>
+                  <Text style={styles.btnGhostText}>Sign out</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.btnGhost} onPress={() => navigation.goBack()}>
+                  <Text style={styles.btnGhostText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnGhost} onPress={() => void onSignOut()}>
+                  <Text style={styles.btnGhostText}>Sign out</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           <Text style={[styles.foot, type.caption]}>

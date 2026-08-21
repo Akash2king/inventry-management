@@ -7,13 +7,16 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://192.168.29.105:8000/api/v1"
+        "EXPO_PUBLIC_API_BASE_URL": "https://inventry-management-1.onrender.com/api/v1"
       },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://inventry-management-1.onrender.com/api/v1"
+      },
       "android": {
         "buildType": "app-bundle"
       }

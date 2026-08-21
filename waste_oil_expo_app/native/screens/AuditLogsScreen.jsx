@@ -233,6 +233,10 @@ export function AuditLogsScreen() {
           <View style={{ paddingVertical: 40 }}>
             <ActivityIndicator size="large" />
           </View>
+        ) : groups.length === 0 && !error ? (
+          <View style={styles.card}>
+            <Text style={styles.sub}>No audit events match these filters.</Text>
+          </View>
         ) : (
           <View style={{ gap: 10 }}>
             {groups.map((g) => (

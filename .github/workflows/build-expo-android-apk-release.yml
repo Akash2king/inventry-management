@@ -1,12 +1,13 @@
 # Build Expo Android APK (native release via prebuild + Gradle)
+#
+# Prefer "Release desktop + Android" (release-clients.yml) for version tags so
+# desktop + APK share one GitHub Release. This workflow is manual-only to avoid
+# racing softprops/tauri-action on the same v* tag.
 
 name: Build Expo Android APK (Release)
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 concurrency:
   group: build-expo-android-apk-release-${{ github.ref }}
@@ -35,6 +36,11 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -46,6 +52,17 @@ jobs:
 
       - name: Install deps (npm ci)
         run: npm ci
+
+      - name: Check Google Services secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "Missing secret GOOGLE_SERVICES_JSON (full google-services.json contents)." >&2
+            exit 1
+          fi
+          echo "GOOGLE_SERVICES_JSON is set (${#GOOGLE_SERVICES_JSON} chars)"
 
       - name: Generate native Android project (expo prebuild)
         env:
@@ -103,12 +120,3 @@ jobs:
         with:
           name: Chem-Solv-Inventory-${{ github.ref_name }}-apk
           path: waste_oil_expo_app/${{ steps.apk.outputs.path }}
-
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: waste_oil_expo_app/${{ steps.apk.outputs.path }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

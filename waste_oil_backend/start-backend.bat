@@ -2,12 +2,14 @@
 setlocal EnableExtensions
 cd /d "%~dp0" || exit /b 1
 
-rem Install venv + deps, pick DB (menu), migrate, run Django.
+rem Install venv + deps, pick DB (menu), ask seed y/n, migrate, run Django.
+rem Interactive prompts: DB profile → bind address → seed y/n
 rem Usage:
 rem   start-backend.bat
 rem   start-backend.bat local
 rem   start-backend.bat cloud 0.0.0.0:8000
 rem   start-backend.bat --seed
+rem   start-backend.bat --no-seed
 rem   start-backend.bat --install-only
 
 set "PY="

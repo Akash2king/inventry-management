@@ -81,7 +81,9 @@ function QueueShell({ title, forwardLabel, returnLabel, showReturn }) {
               Could not load your queue
             </p>
             <p style={{ color: "var(--clr-text-muted, #64748b)", fontSize: "0.9rem", marginBottom: "1rem" }}>
-              {storeError}
+              {String(storeError).length > 320
+                ? `${String(storeError).slice(0, 319)}…`
+                : storeError}
             </p>
             <button type="button" className="btn btn-primary" onClick={() => fetchQueue().catch(() => {})}>
               Retry

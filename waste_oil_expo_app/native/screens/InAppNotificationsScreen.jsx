@@ -23,6 +23,8 @@ import {
 import { theme } from "../theme.js";
 import { useResponsive } from "../utils/responsive.js";
 import { useResponsiveType } from "../utils/typography.js";
+import { ErrorBanner } from "../components/ui/index.js";
+import { showError, showSuccess } from "../utils/feedback.js";
 
 function formatTs(iso) {
   const d = new Date(iso);
@@ -37,6 +39,7 @@ export function InAppNotificationsScreen({ navigation }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [pushPerm, setPushPerm] = useState("");
   const [unreadTotal, setUnreadTotal] = useState(0);
@@ -66,8 +69,10 @@ export function InAppNotificationsScreen({ navigation }) {
         if (listRes.ok) {
           const list = Array.isArray(listRes.data?.results) ? listRes.data.results : [];
           setRows(list);
+          setLoadError("");
         } else {
           setRows([]);
+          setLoadError(listRes.error || "Could not load notifications.");
         }
         const c =
           countRes.ok && countRes.data
@@ -75,6 +80,9 @@ export function InAppNotificationsScreen({ navigation }) {
             : 0;
         setUnreadTotal(c);
         await setAppBadgeCountSafe(c);
+      } catch (e) {
+        setRows([]);
+        setLoadError(e?.message || "Could not load notifications.");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -119,7 +127,10 @@ export function InAppNotificationsScreen({ navigation }) {
       if (!res.ok) {
         throw new Error(res.error || "Could not send test push");
       }
+      showSuccess("Test push sent.");
       await load("refresh");
+    } catch (e) {
+      showError(e?.message || "Could not send test push");
     } finally {
       setTestPushBusy(false);
     }
@@ -129,7 +140,10 @@ export function InAppNotificationsScreen({ navigation }) {
     if (!api || !canBroadcast) return;
     const title = broadcastTitle.trim();
     const body = broadcastBody.trim();
-    if (!title) return;
+    if (!title) {
+      showError("Enter a title for the announcement.");
+      return;
+    }
     setBroadcastBusy(true);
     try {
       const res = await api.notifications.broadcast({ title, body });
@@ -138,7 +152,10 @@ export function InAppNotificationsScreen({ navigation }) {
       }
       setBroadcastTitle("");
       setBroadcastBody("");
+      showSuccess("Announcement sent.");
       await load("refresh");
+    } catch (e) {
+      showError(e?.message || "Could not send notification");
     } finally {
       setBroadcastBusy(false);
     }
@@ -215,7 +232,9 @@ export function InAppNotificationsScreen({ navigation }) {
             { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%", paddingHorizontal: horizontalPad },
           ]}
           ListHeaderComponent={
-            Platform.OS === "web" ? null : !isOneSignalRuntimeSupported() ? (
+            <>
+              <ErrorBanner message={loadError} onRetry={() => void load("refresh")} />
+              {Platform.OS === "web" ? null : !isOneSignalRuntimeSupported() ? (
               <View style={styles.pushBanner}>
                 <Text style={styles.pushTitle}>System notifications</Text>
                 <Text style={styles.pushBody}>
@@ -257,9 +276,12 @@ export function InAppNotificationsScreen({ navigation }) {
                   </TouchableOpacity>
                 )}
               </View>
-            )
+            )}
+            </>
           }
-          ListEmptyComponent={<Text style={styles.empty}>No notifications.</Text>}
+          ListEmptyComponent={
+            loadError ? null : <Text style={styles.empty}>No notifications.</Text>
+          }
           renderItem={({ item: n }) => (
             <View style={[styles.card, !n.read_at && styles.cardUnread]}>
               <Text style={styles.title}>{n.title}</Text>

@@ -50,43 +50,53 @@ DEPARTMENT_SPECS = [
     },
 ]
 
+# Same usernames as seed_workflow_demo / docs (QUICKSTART, CONTRIBUTING).
 USER_SPECS = [
     {
-        "username": "storeman_demo",
-        "email": "storeman_demo@demo.local",
+        "username": "storeman",
+        "email": "storeman@demo.local",
         "full_name": "Storeman Demo",
         "role": CustomUser.Role.STOREMAN,
         "dept_code": "STORE",
     },
     {
-        "username": "treatment_demo",
-        "email": "treatment_demo@demo.local",
+        "username": "treatment",
+        "email": "treatment@demo.local",
         "full_name": "Treatment Demo",
         "role": CustomUser.Role.TREATMENT,
         "dept_code": "TREAT",
     },
     {
-        "username": "waste_admin_demo",
-        "email": "waste_admin_demo@demo.local",
+        "username": "waste_admin",
+        "email": "waste_admin@demo.local",
         "full_name": "Waste Admin Demo",
         "role": CustomUser.Role.ADMIN,
         "dept_code": "ADMIN",
     },
     {
-        "username": "manager_demo",
-        "email": "manager_demo@demo.local",
+        "username": "manager",
+        "email": "manager@demo.local",
         "full_name": "Manager Demo",
         "role": CustomUser.Role.MANAGER,
         "dept_code": "MGR",
     },
     {
-        "username": "gm_demo",
-        "email": "gm_demo@demo.local",
+        "username": "gm",
+        "email": "gm@demo.local",
         "full_name": "GM Demo",
         "role": CustomUser.Role.GM,
         "dept_code": "GM",
     },
 ]
+
+# Legacy names from older seed_test_data; remove on --clear so they don't confuse login.
+_LEGACY_DEMO_USERNAMES = (
+    "storeman_demo",
+    "treatment_demo",
+    "waste_admin_demo",
+    "manager_demo",
+    "gm_demo",
+)
 
 
 class Command(BaseCommand):
@@ -133,9 +143,12 @@ class Command(BaseCommand):
         self.create_stage_transitions(records, departments, users)
         self.print_summary()
 
+        names = ", ".join(s["username"] for s in USER_SPECS)
         self.stdout.write(
             self.style.SUCCESS(
-                f"\nDemo users ready. Shared password: {password!r}\n"
+                f"\nDemo users ready: {names}\n"
+                f"Shared password: {password!r}\n"
+                f"Desktop login example: storeman / {password}\n"
             )
         )
 
@@ -144,12 +157,19 @@ class Command(BaseCommand):
         StageTransition.objects.all().delete()
         WasteOilRecord.objects.all().delete()
         Vendor.objects.all().delete()
-        CustomUser.objects.filter(
-            username__in=[s["username"] for s in USER_SPECS]
-        ).delete()
-        Department.objects.filter(
-            code__in=[s["code"] for s in DEPARTMENT_SPECS]
-        ).delete()
+        # Do not delete users/departments: audit_log is append-only and blocks
+        # FK nulling UPDATEs. Users are upserted below; drop legacy _demo names
+        # only when they have no audit rows (best-effort).
+        legacy = CustomUser.objects.filter(username__in=_LEGACY_DEMO_USERNAMES)
+        for user in legacy:
+            try:
+                user.delete()
+            except Exception as exc:  # noqa: BLE001 — leave legacy user if blocked
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  Kept legacy user {user.username!r} ({exc.__class__.__name__})"
+                    )
+                )
         self.stdout.write(self.style.SUCCESS("[OK] Cleared demo/test data\n"))
 
     def create_departments(self):
@@ -219,14 +239,14 @@ class Command(BaseCommand):
 
     def _holder_for_stage(self, stage, users):
         if stage == 1:
-            return users["storeman_demo"]
+            return users["storeman"]
         if stage == 2:
-            return users["treatment_demo"]
+            return users["treatment"]
         if stage == 3:
-            return users["waste_admin_demo"]
+            return users["waste_admin"]
         if stage == 4:
-            return users["manager_demo"]
-        return users["gm_demo"]
+            return users["manager"]
+        return users["gm"]
 
     def create_waste_oil_records(self, users, vendors, departments, record_count):
         self.stdout.write(f"Creating {record_count} waste oil records...")
@@ -280,7 +300,7 @@ class Command(BaseCommand):
                     "current_department": departments[
                         DEPARTMENT_SPECS[stage - 1]["code"]
                     ],
-                    "created_by": users["storeman_demo"],
+                    "created_by": users["storeman"],
                     "is_locked": alert == WasteOilRecord.AlertLevel.COMPLETED,
                     "remarks": "Auto-generated demo record.",
                 },
@@ -299,10 +319,10 @@ class Command(BaseCommand):
         transition_count = 0
 
         forward_by_stage = {
-            1: users["storeman_demo"],
-            2: users["treatment_demo"],
-            3: users["waste_admin_demo"],
-            4: users["manager_demo"],
+            1: users["storeman"],
+            2: users["treatment"],
+            3: users["waste_admin"],
+            4: users["manager"],
         }
 
         for record in records:

@@ -146,12 +146,19 @@ def touch_session_last_seen(request, user) -> None:
     except (ValueError, TypeError):
         return
     key = f"wom_sess_touch:{sid_uuid}"
-    if cache.get(key):
-        return
+    # Cache is optional (Redis may be down in local/dev). Never 500 the request.
+    try:
+        if cache.get(key):
+            return
+    except Exception:
+        pass
     updated = UserAuthSession.objects.filter(
         id=sid_uuid,
         user_id=user.pk,
         revoked_at__isnull=True,
     ).update(last_seen_at=timezone.now())
     if updated:
-        cache.set(key, 1, 300)
+        try:
+            cache.set(key, 1, 300)
+        except Exception:
+            pass

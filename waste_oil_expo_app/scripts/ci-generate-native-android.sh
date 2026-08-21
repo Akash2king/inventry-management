@@ -17,7 +17,7 @@ if [ ! -f google-services.json ]; then
   fi
 fi
 # Validate JSON roughly
-python - <<'PY'
+python3 - <<'PY'
 import json, sys
 from pathlib import Path
 p = Path("google-services.json")

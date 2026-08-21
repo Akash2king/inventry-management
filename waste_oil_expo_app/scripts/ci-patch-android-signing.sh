@@ -22,7 +22,7 @@ else
   exit 1
 fi
 
-python - "$TARGET" <<'PY'
+python3 - "$TARGET" <<'PY'
 from __future__ import annotations
 import re
 import sys

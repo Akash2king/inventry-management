@@ -12,6 +12,7 @@ import { useAuth } from "../AuthContext.jsx";
 import { theme } from "../theme.js";
 import { Button, Card, FadeIn, KeyboardAwareScroll } from "../components/ui/index.js";
 import { showError, showBlockingError } from "../utils/feedback.js";
+import { friendlyLoginMessage } from "../utils/apiErrors.js";
 import { useResponsive } from "../utils/responsive.js";
 import { ContentWidth } from "../components/ui/ContentWidth.jsx";
 import { useResponsiveType } from "../utils/typography.js";
@@ -33,11 +34,20 @@ export function LoginScreen({ navigation }) {
       );
       return;
     }
+    const u = username.trim();
+    if (!u) {
+      showError("Please enter your username.");
+      return;
+    }
+    if (!password) {
+      showError("Please enter your password.");
+      return;
+    }
     setBusy(true);
     try {
-      await login(username.trim(), password);
+      await login(u, password);
     } catch (e) {
-      showError(e?.message || "Login failed");
+      showError(friendlyLoginMessage(e?.message || "Login failed"));
     } finally {
       setBusy(false);
     }

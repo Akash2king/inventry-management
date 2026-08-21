@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Install venv + deps, pick DB (menu), migrate, run Django.
+# Install venv + deps, pick DB (menu), ask seed y/n, migrate, run Django.
 # Usage:
 #   ./start-backend.sh
 #   ./start-backend.sh local
 #   ./start-backend.sh cloud 0.0.0.0:8000
 #   ./start-backend.sh --seed
+#   ./start-backend.sh --no-seed
 #   ./start-backend.sh --install-only
+#
+# Interactive prompts (no profile / no --yes): DB profile → bind address → seed y/n.
 set -eu
 cd "$(dirname "$0")"
 
