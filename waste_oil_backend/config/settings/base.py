@@ -76,20 +76,62 @@ TEMPLATES = [
 ]
 
 # Database: set DATABASE_URL in waste_oil_backend/.env (loaded above via load_dotenv).
-# PostgreSQL example (Aiven): postgres://user:pass@host:port/defaultdb?sslmode=require
-# Omit DATABASE_URL for local SQLite (db.sqlite3 in project root).
+# Local Postgres (no SSL):  postgres://user:pass@127.0.0.1:5432/dbname?sslmode=disable
+#   If the password contains @, URL-encode it as %40 (e.g. root@123 → root%40123).
+# Cloud Postgres (Aiven):   postgres://user:pass@host:port/defaultdb?sslmode=require
+# Omit DATABASE_URL entirely to use SQLite (db.sqlite3) for local dev only.
 _database_url = os.environ.get("DATABASE_URL", "").strip()
 _sqlite_default = "sqlite:///" + str(BASE_DIR / "db.sqlite3")
 _use_postgres = _database_url.startswith(("postgres://", "postgresql://"))
+
+
+def _postgres_ssl_require(url: str) -> bool:
+    """Require SSL for remote Postgres; never force it for local/dev unless asked."""
+    if not url.startswith(("postgres://", "postgresql://")):
+        return False
+    override = os.environ.get("DATABASE_SSL_REQUIRE", "").strip().lower()
+    if override in ("0", "false", "no", "disable", "off"):
+        return False
+    if override in ("1", "true", "yes", "require", "on"):
+        return True
+    try:
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(url)
+        sslmode = (parse_qs(parsed.query).get("sslmode") or [""])[0].lower()
+        if sslmode in ("disable", "allow"):
+            return False
+        if sslmode in ("prefer",):
+            return False
+        if sslmode in ("require", "verify-ca", "verify-full"):
+            return True
+        host = (parsed.hostname or "").lower()
+        if host in ("localhost", "127.0.0.1", "::1"):
+            return False
+    except Exception:
+        pass
+    # Remote hosts default to SSL (Aiven / managed Postgres).
+    return True
+
 
 DATABASES = {
     "default": dj_database_url.config(
         default=_database_url or _sqlite_default,
         conn_max_age=600,
         conn_health_checks=True,
-        ssl_require=_use_postgres,
+        ssl_require=_postgres_ssl_require(_database_url) if _use_postgres else False,
     )
 }
+
+# Honor ?sslmode= from DATABASE_URL when not forcing SSL (local Postgres).
+if _use_postgres and not _postgres_ssl_require(_database_url):
+    try:
+        from urllib.parse import parse_qs, urlparse
+
+        _sslmode = (parse_qs(urlparse(_database_url).query).get("sslmode") or ["disable"])[0]
+        DATABASES["default"].setdefault("OPTIONS", {})["sslmode"] = _sslmode
+    except Exception:
+        DATABASES["default"].setdefault("OPTIONS", {})["sslmode"] = "disable"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

@@ -2,17 +2,20 @@
 setlocal EnableExtensions
 cd /d "%~dp0" || exit /b 1
 
-rem Quick start (same as start-backend.bat). Pass a profile to skip the menu:
-rem   run-server.bat
-rem   run-server.bat local
-rem   run-server.bat cloud
-rem   run-server.bat sqlite 0.0.0.0:8000
+rem Install venv + deps, pick DB (menu), migrate, run Django.
+rem Usage:
+rem   start-backend.bat
+rem   start-backend.bat local
+rem   start-backend.bat cloud 0.0.0.0:8000
+rem   start-backend.bat --seed
+rem   start-backend.bat --install-only
 
 set "PY="
 where py >nul 2>&1 && set "PY=py -3"
 if not defined PY where python >nul 2>&1 && set "PY=python"
 if not defined PY (
   echo Python 3 not found. Install from https://www.python.org/downloads/
+  echo Enable "Add python.exe to PATH", then re-open this terminal.
   pause
   exit /b 1
 )
